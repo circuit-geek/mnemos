@@ -7,7 +7,13 @@ authors = [
     { name = "Gaurav Prasanna", email = "devandgames21@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.162.0",
+    "openai>=3.40.0",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "uvicorn>=0.54.0",
+]
 
 [project.scripts]
 backend = "backend:main"
