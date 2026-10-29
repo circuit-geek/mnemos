@@ -1,0 +1,72 @@
+[
+  {
+    "frame_index": 0,
+    "timestamp_seconds": 0.0,
+    "tracking_id": "1",
+    "label": "mug",
+    "bbox_xyxy": [
+      100,
+      100,
+      200,
+      200
+    ],
+    "bbox_convention": "pixel half-open [left, top, right, bottom]",
+    "evidence": "SAM 3.1 response in raw_response.txt"
+  },
+  {
+    "frame_index": 1,
+    "timestamp_seconds": 0.033333,
+    "tracking_id": "1",
+    "label": "mug",
+    "bbox_xyxy": [
+      110,
+      100,
+      210,
+      200
+    ],
+    "bbox_convention": "pixel half-open [left, top, right, bottom]",
+    "evidence": "SAM 3.1 response in raw_response.txt"
+  },
+  {
+    "frame_index": 2,
+    "timestamp_seconds": 0.066678,
+    "tracking_id": "1",
+    "label": "mug",
+    "bbox_xyxy": [
+      120,
+      100,
+      220,
+      200
+    ],
+    "bbox_convention": "pixel half-open [left, top, right, bottom]",
+    "evidence": "SAM 3.1 response in raw_response.txt"
+  },
+  {
+    "frame_index": 1,
+    "timestamp_seconds": 0.033333,
+    "tracking_id": "2",
+    "label": "mug",
+    "bbox_xyxy": [
+      300,
+      50,
+      360,
+      120
+    ],
+    "bbox_convention": "pixel half-open [left, top, right, bottom]",
+    "evidence": "SAM 3.1 response in raw_response.txt"
+  },
+  {
+    "frame_index": 3,
+    "timestamp_seconds": 0.100022,
+    "tracking_id": "2",
+    "label": "mug",
+    "bbox_xyxy": [
+      310,
+      50,
+      370,
+      120
+    ],
+    "bbox_convention": "pixel half-open [left, top, right, bottom]",
+    "evidence": "SAM 3.1 response in raw_response.txt"
+  }
+]
