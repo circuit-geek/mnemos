@@ -12,7 +12,7 @@ CORS origins come from `FRONTEND_ORIGINS` (comma-separated).
 | GET | `/videos/{id}/media` | The original upload for playback; supports HTTP range requests. |
 | GET | `/videos/{id}/memory` | Full history in one response: `objects`, all `observations` (pixel `bounding_box`), `events` and `relationships`. Relationship start/end appear as derived `RELATIONSHIP_STARTED` / `RELATIONSHIP_ENDED` events. The explorer derives any moment from this. |
 | GET | `/videos/{id}/observations` | Relational observations (`limit`, `offset`). |
-| POST | `/videos/{id}/ask` | Body `{question}`. Returns `{question, intent, answer, sufficient_evidence, evidence[]}`; every answer cites retrieved evidence. |
+| POST | `/videos/{id}/ask` | Body `{question}`. Returns `{question, intent, answer, sufficient_evidence, evidence[]}`; `intent` shows how the question was interpreted (intent, object, relation type, time). Every answer cites retrieved evidence; see `docs/architecture/reasoning.md`. |
 | GET | `/videos/{id}/objects` | Tracked objects in the graph. |
 | GET | `/videos/{id}/objects/{object_id}/history` | Observations of one object, in time order. |
 | GET | `/videos/{id}/events` | `APPEARED`, `MOVED`, `NO_LONGER_VISIBLE` events. |
@@ -24,5 +24,7 @@ Evidence: every `evidence_uri` in `ask`, `history` and `graph` responses is a re
 (`/api/v1/videos/{id}/frames/{timestamp_ms}`) to prepend with the API base, never a server path.
 It is `null` for evidence with no timestamp.
 
-Errors: 404 unknown video or no frame at that time, 422 invalid input, 502 model failure, 503 memory or reasoning not configured.
+Errors: 400 invalid upload or concepts, 404 unknown video or no frame at that time, 413 file too large, 415 unsupported type, 422 invalid input, 502 model failure, 503 memory or reasoning not configured.
+
+The API has no authentication; it is meant to run locally for one user (`docs/decisions/0001-local-only-scope.md`). Do not expose it to the internet as is.
 `NO_LONGER_VISIBLE` means the tracker stopped detecting an object, not that it physically left.

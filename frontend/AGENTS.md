@@ -261,11 +261,9 @@ This behavior is a core product requirement.
 
 Do not fabricate AI responses.
 
-When using mock data, clearly identify the application as a prototype or demo.
+The application has no mock mode. Display the actual API response, including how the question was interpreted and the cited evidence.
 
-When connected to the backend, display actual API responses.
-
-Do not silently fall back to mock reasoning when a live API request fails.
+When a request fails, or the backend reports too little evidence, say so. Never substitute canned or invented answers.
 
 ---
 
@@ -277,9 +275,7 @@ All backend communication must be organized through service modules.
 
 Do not place API requests directly inside presentational components.
 
-Consult `docs/api/contracts.md` before implementing API integration.
-
-These endpoints are proposed contracts until documented and implemented.
+Consult `docs/api/backend-api.md` before changing API integration; it is the contract for the implemented endpoints.
 
 ### Integration Rules
 
@@ -299,9 +295,10 @@ Configure the API base URL through:
 Never expose private API credentials in frontend code.
 
 
-## 10. Frontend Deployment
+## 10. Build and Configuration
 
-The frontend must remain independently deployable.
-Do not assume the backend and frontend share the same domain.
+The frontend runs locally with `npm run dev` and builds with `npm run build`; hosting it is out of scope.
+
+It is a separate client of the backend: do not assume the two share an origin, and take the API location only from `VITE_API_BASE_URL` (documented in `frontend/.env.example`).
 
 ---

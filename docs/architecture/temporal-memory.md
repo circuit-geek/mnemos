@@ -66,6 +66,8 @@ objects, observations, and events in one transaction. Node IDs and `MERGE`
 make repeating the same ingestion idempotent. Changing thresholds for the
 same video may add new event IDs; use a new video ID for a distinct analysis.
 
-`Neo4jMemoryRepository` provides `get_video_objects`, `get_object_history`,
+The API serves the full history in one response (`GET /videos/{id}/memory`): objects, every observation, events, and relations. Relationship start/end events are derived from the stored relation intervals at read time; they are not stored in Neo4j.
+
+`Neo4jMemoryRepository` provides `get_video_objects`, `get_video_observations`, `get_video_relationships`, `get_object_history`,
 `get_video_events`, `get_last_observed_position`, and `get_moved_objects`.
 Results are plain dictionaries ordered by time where applicable.

@@ -74,7 +74,7 @@ frontend/   React + TypeScript + Vite + Tailwind + React Flow explorer
 docs/       Architecture, decisions, specifications and API contracts
 ```
 
-Frontend and backend are independently deployable. See [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md) for component-specific notes.
+The project runs locally; cloud deployment is out of scope ([ADR 0001](docs/decisions/0001-local-only-scope.md)). Frontend and backend are separate applications that only talk over the HTTP API. See [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md) for component-specific notes.
 
 ### Backend modules (`backend/src/backend`)
 
@@ -182,10 +182,10 @@ sequenceDiagram
 
 ### Prerequisites
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Python 3.13+ and [uv](https://docs.astral.sh/uv/)
 - Node.js 20+ and npm
 - Docker (for Postgres and Neo4j)
-- FFmpeg (frame extraction)
+- FFmpeg and FFprobe on `PATH` (frame extraction and video metadata)
 - A Meta Model API key for real SAM and Muse Spark runs. Not needed for the mock mode below.
 
 ### 1. Backend
@@ -256,6 +256,8 @@ cd frontend && npm run build       # typecheck + production build
 
 ## Known limits
 
+- The API has no authentication and is meant for one local user; do not expose it to the internet.
+- Uploaded videos are stored on local disk.
 - Object identity is scoped to one recording and can split across long occlusions.
 - Relation boundaries are accurate only to the scene sampling interval.
 - Background jobs do not survive a backend restart.
@@ -267,3 +269,5 @@ cd frontend && npm run build       # typecheck + production build
 - [Spatial memory](docs/architecture/spatial-memory.md)
 - [Reasoning](docs/architecture/reasoning.md)
 - [Backend API](docs/api/backend-api.md)
+- Decisions: [local-only scope](docs/decisions/0001-local-only-scope.md), [per-video concepts](docs/decisions/0002-per-video-concepts-and-discovery.md), [spatial relations](docs/decisions/0003-spatial-relations-verified-on-sampled-frames.md)
+- [Demo video plan](docs/specifications/demo-videos.md) and [submission notes](docs/specifications/submission.md)

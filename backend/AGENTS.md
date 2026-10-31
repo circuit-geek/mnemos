@@ -15,7 +15,7 @@ It provides APIs for:
 - Historical memory retrieval.
 - Natural-language question answering.
 
-The backend must remain modular, testable, and independently deployable.
+The backend must remain modular, testable, and runnable on its own (the frontend is a separate client of its HTTP API).
 
 Follow the repository-wide instructions in the root `AGENTS.md`.
 
@@ -350,11 +350,14 @@ Recommended flow:
 Use explicit states:
 
 - `queued`
-- `processing`
-- `segmenting`
+- `discovering` (Muse Spark names the objects to track; skipped when the uploader names them)
+- `tracking` (SAM runs once per object; the stage note reports `n/m tracked`)
 - `building_memory`
+- `analyzing_scene` (spatial relationships)
 - `completed`
 - `failed`
+
+These are stored on the processing job (`stage`, `stage_detail`) and returned by `GET /videos/{id}`. A stage is recorded only when that work actually starts.
 
 Status updates must reflect actual processing progress.
 
@@ -362,15 +365,11 @@ Do not generate fake processing completion states.
 
 ### Job Reliability
 
-In-process background execution is acceptable for early local experiments.
-
-For deployed processing, prefer a separate worker or durable processing mechanism if jobs must survive restarts.
+Processing runs in-process through FastAPI background tasks. This is the intended design for this project: it runs locally, and a job in flight is lost if the backend restarts (re-upload to retry). Cloud deployment and a durable queue are out of scope (`docs/decisions/0001-local-only-scope.md`); keep `ProcessingDispatcher` as the only thing the service layer knows about so one could be added.
 
 Do not hold a web request open while waiting for long-running inference.
 
-Do not assume local filesystem storage will persist across deployments.
-
-Use configurable storage paths or object storage.
+Keep file access behind `ObjectStorage`, with a configurable local storage path.
 
 ---
 
@@ -507,23 +506,21 @@ Run the relevant test suite before declaring a feature complete.
 
 ---
 
-## 14. Deployment Guidelines
+## 14. Local Run Guidelines
 
-The backend must be containerizable.
+The backend runs locally; cloud deployment is out of scope.
 
 Requirements:
 
-- Dockerfile located in `backend/`.
-- Configurable server port.
+- Everything configurable through environment variables, documented in `backend/.env.example`. Defaults must work for a fresh clone against `docker-compose.yml`.
 - No hardcoded development URLs.
-- Environment-based credentials.
-- CORS configured for approved frontend origins.
-- Startup health endpoint.
-- Graceful application shutdown.
-- Persistent external storage for required data.
+- CORS limited to the origins in `FRONTEND_ORIGINS`.
+- Startup health endpoint (`/health`).
+- Graceful shutdown that closes database and API clients.
+- Credentials only from the environment; never committed or logged.
 
-Do not depend on a locally running Neo4j instance in production.
+External programs the backend needs: `ffmpeg` and `ffprobe` on `PATH`. The README lists them as prerequisites.
 
-The backend must remain independently deployable from the frontend.
+The backend must stay usable without the frontend (every capability is reachable through the HTTP API and the scripts in `backend/scripts`).
 
 ---

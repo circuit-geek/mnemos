@@ -44,7 +44,7 @@ MNEMOS is being developed for the Meta Global AI Developer Hackathon 2026.
 - October 31, 2026: Target completion of the backend processing and reasoning pipeline.
 - November 1, 2026: Target completion of frontend/backend integration.
 - November 2, 2026: Feature-complete working prototype and feature freeze.
-- November 3, 2026: Deployment verification, demo recording, and documentation.
+- November 3, 2026: Fresh-clone run verification, demo recording, and documentation.
 - November 4, 2026: Submission preparation and final verification.
 - November 5, 2026, 07:30 IST: Official submission deadline.
 
@@ -53,8 +53,12 @@ MNEMOS is being developed for the Meta Global AI Developer Hackathon 2026.
 The final submission must include:
 
 1. A public GitHub repository.
-2. A working, publicly accessible application.
-3. A demonstration video of no more than three minutes.
+2. A demonstration video of no more than three minutes (hosted on YouTube).
+3. Written answers on the submission form: a project description, how Meta products were used, and why Meta's models matter to the solution.
+
+The submission form does not ask for a hosted application. MNEMOS is therefore built to run locally from a fresh clone; cloud deployment is out of scope (see `docs/decisions/0001-local-only-scope.md`). A reviewer must be able to follow `README.md` and get the full pipeline running.
+
+Draft submission text and the demo script are in `docs/specifications/submission.md`.
 
 ### Development Constraints
 
@@ -66,7 +70,7 @@ Every implementation decision should contribute directly to the working prototyp
 
 Do not introduce unnecessary abstractions, infrastructure, dependencies, or architectural complexity.
 
-After the feature freeze, prioritize reliability, integration, deployment, and documentation over additional features.
+After the feature freeze, prioritize reliability, integration, local run reproducibility, and documentation over additional features.
 
 ---
 
@@ -112,11 +116,13 @@ Existing frontend libraries and components should be reused wherever appropriate
 
 Neo4j serves as the primary temporal knowledge graph database.
 
-### Deployment
+### Running locally
 
-Frontend and backend must remain independently deployable from the monorepo.
+The project runs on a developer machine: Postgres and Neo4j through `backend/docker-compose.yml`, the FastAPI backend with `uvicorn`, and the frontend with Vite. FFmpeg and FFprobe must be installed.
 
-Deployment infrastructure should remain minimal and compatible with the hackathon requirements.
+Cloud deployment, container images for the apps, managed databases, object storage and message queues are out of scope. Keep the existing seams (`ObjectStorage`, `ProcessingDispatcher`) so they could be added later, but do not build them now.
+
+Frontend and backend remain separate applications that communicate only through the documented HTTP API; do not couple them through shared files or a shared origin.
 
 ---
 
@@ -131,7 +137,7 @@ mnemos/
 │   ├── tests/
 │   ├── scripts/
 │   ├── pyproject.toml
-│   └── Dockerfile
+│   └── docker-compose.yml
 │
 ├── frontend/
 │   ├── src/
@@ -149,7 +155,7 @@ mnemos/
 └── .gitignore
 ```
 
-The backend and frontend are independently deployable applications.
+The backend and frontend are separate applications that talk over the documented HTTP API.
 
 Backend-specific instructions are defined in `backend/AGENTS.md`.
 
@@ -171,7 +177,7 @@ Prioritize this sequence:
 6. Graph retrieval.
 7. Muse Spark reasoning.
 8. Frontend integration.
-9. Deployment and testing.
+9. Local packaging, testing, and demo preparation.
 
 Each stage must produce a verifiable result.
 
@@ -285,7 +291,7 @@ Avoid creating unnecessary documents that duplicate existing information.
 
 ## 10. Git Workflow
 
-The `main` branch should remain stable and deployable.
+The `main` branch should remain stable and runnable from a fresh clone.
 
 Use short-lived feature branches for substantial changes.
 
@@ -316,4 +322,4 @@ Keep pull requests focused.
 - Natural-language querying through Muse Spark.
 - Evidence-linked answers.
 - Interactive frontend integration.
-- Public deployment.
+- Reproducible local setup (README, `.env.example`, compose file) and demo assets.

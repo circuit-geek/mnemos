@@ -1,5 +1,21 @@
 # Demo / Test Videos
 
+## Status
+
+Three clips exist (`backend/test_data/scenario_1..3.mp4`, 854x480, about 20 s, local-only because
+`test_data/` is git-ignored). Processed with automatic object discovery they gave:
+
+| Clip | What happens | Verified result |
+|---|---|---|
+| `scenario_1` | Mug and laptop; mug leaves, returns later | Mug `NEXT_TO` laptop 0-10 s; mug no longer detected from 9.7 s; it returns at 15.2 s as a new track (identity splits); laptop `NEAR` mug from 16 s |
+| `scenario_2` | Mug and pen; notebook appears, then phone | Notebook appears at 8.0 s, phone at 15.6 s; `NEAR`/`NEXT_TO` relations open and close as objects arrive |
+| `scenario_3` | Pen beside notebook; a mug is placed on the notebook | Pen `NEAR` then `NEXT_TO` notebook; mug appears at 18.4 s, `NEAR` then `ON` the notebook from 20 s (checked against the frame) |
+
+Still to shoot: a container clip (`INSIDE`) and, optionally, an occlusion clip (clips 3 and 5 below).
+Copy the clips you want reviewers to use into a tracked folder (see `submission.md`).
+
+The plan below is the original shoot script.
+
 Five short clips (15–20 s each) that together exercise every query intent. They double as backend
 integration fixtures and as the demo videos in the UI. Filmed, not generated: SAM and Muse need real
 objects, and judges will see these.
