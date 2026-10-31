@@ -6,3 +6,4 @@ __pycache__/
 outputs/
 test_data/
 .idea/
+data/

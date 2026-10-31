@@ -1,0 +1,16 @@
+{
+  "tracks": {
+    "1": {
+      "label": "mug",
+      "first_observed_frame": 0,
+      "last_observed_frame": 2,
+      "total_frames_detected": 3
+    },
+    "2": {
+      "label": "mug",
+      "first_observed_frame": 1,
+      "last_observed_frame": 3,
+      "total_frames_detected": 2
+    }
+  }
+}
