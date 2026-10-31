@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Eye } from "lucide-react";
 import { useExplorer } from "@/hooks/ExplorerContext";
 import { VideoPlayer } from "./VideoPlayer";
-import { SceneIllustration, SCENE_ASPECT } from "./SceneIllustration";
 import { DetectionOverlay, type Detection } from "./DetectionOverlay";
 import { ObjectChips } from "./ObjectChips";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -26,17 +25,15 @@ export function VisualPerceptionPanel() {
     return { visibleIds: visible, observedIds: observed, detections: dets };
   }, [graph.snapshot, memory.objects]);
 
-  const isIllustration = video.mediaKind === "scene-illustration";
+  // Boxes can only be placed if the frame size is known (videos processed before it was recorded lack it).
+  const overlayAvailable = hasMemory && video.width !== null && video.height !== null;
 
   return (
     <section aria-label="Visual perception" className="flex min-h-0 flex-col gap-3">
       <PanelHeader icon={<Eye className="size-4" />} title="Visual Perception" subtitle="Objects detected in the video" />
       <VideoPlayer
         className="aspect-video min-h-[220px] lg:aspect-auto lg:flex-1"
-        src={isIllustration ? undefined : video.videoUrl}
-        fallback={isIllustration ? <SceneIllustration visibleObjectIds={visibleIds} /> : undefined}
-        fallbackAspect={SCENE_ASPECT}
-        mediaLabel={isIllustration ? "Sample scene illustration · not a recording" : undefined}
+        src={video.videoUrl}
         duration={video.duration}
         currentTime={timeline.currentTime}
         isPlaying={timeline.isPlaying}
@@ -47,7 +44,7 @@ export function VisualPerceptionPanel() {
         onRateChange={timeline.setRate}
         overlayEnabled={overlayEnabled}
         onOverlayEnabledChange={setOverlayEnabled}
-        overlayAvailable={hasMemory}
+        overlayAvailable={overlayAvailable}
         renderOverlay={(content) => (
           <DetectionOverlay
             content={content}
@@ -71,8 +68,8 @@ export function VisualPerceptionPanel() {
           <EmptyState
             className="!flex-row !justify-start !gap-3 !p-0 text-left"
             icon={<Eye className="size-4" />}
-            title="No detections"
-            description="Uploads are not analyzed in this prototype, so there are no detected objects."
+            title="No objects detected"
+            description="The pipeline finished but found nothing to track in this video."
           />
         )}
       </div>

@@ -35,10 +35,15 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
       {(message.unsupported || message.error) && (
         <p className={cn("flex items-center gap-1.5 text-xs font-medium", message.error ? "text-warning" : "text-muted")}>
           {message.error ? <AlertCircle className="size-3.5" /> : <Info className="size-3.5" />}
-          {message.error ? "Something went wrong" : "Prototype limitation"}
+          {message.error ? "Something went wrong" : "Not enough evidence in memory"}
         </p>
       )}
       <p className="leading-relaxed">{message.content}</p>
+      {message.intent && (
+        <p className="text-[11px] text-muted">
+          Interpreted as <span className="font-medium text-fg">{message.intent}</span>
+        </p>
+      )}
       {message.error && onRetry && (
         <Button variant="outline" size="sm" className="self-start" onClick={onRetry}>
           <RotateCcw className="size-3.5" /> Retry

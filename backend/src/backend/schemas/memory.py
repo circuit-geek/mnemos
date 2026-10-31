@@ -29,6 +29,9 @@ class MemoryObservation(BaseModel):
 class MemoryEvent(BaseModel):
     event_id: str
     object_id: str
+    # Second object of a relationship event; the relationship itself is `relationship_id`.
+    related_object_id: str | None = None
+    relationship_id: str | None = None
     event_type: str
     start_time_ms: int
     end_time_ms: int
@@ -73,3 +76,17 @@ class GraphSnapshot(BaseModel):
 
 
 AskResponse = Answer
+
+
+class FullObservation(MemoryObservation):
+    object_id: str
+
+
+class MemoryBundle(BaseModel):
+    """Everything the explorer needs for one recording; the client derives any moment from it."""
+
+    video_id: str
+    objects: list[MemoryObject]
+    observations: list[FullObservation]
+    events: list[MemoryEvent]
+    relationships: list[MemoryRelationship]

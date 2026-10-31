@@ -1,64 +1,88 @@
-import { mockLatency } from "@/lib/api";
-import { demoVideos } from "@/mocks/videos";
+import { ApiError, apiFetch, frameUrl, videoMediaUrl } from "@/lib/api";
 import type {
   ProcessingJob,
   ProcessingStage,
   ProcessingStageId,
+  ProcessingStatus,
   VideoRecord,
 } from "@/types";
 
 export const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
 export const ACCEPTED_EXTENSIONS = [".mp4", ".mov", ".webm"];
 
-export const PROCESSING_STAGES: ProcessingStage[] = [
-  { id: "uploaded", label: "Video uploaded", description: "File received in your browser" },
-  { id: "perception", label: "Visual perception", description: "Detect objects in frames" },
-  { id: "tracking", label: "Object tracking", description: "Follow objects over time" },
-  { id: "memory", label: "Memory construction", description: "Build the temporal graph" },
-  { id: "ready", label: "Ready for exploration", description: "Open in Memory Explorer" },
+/** The pipeline in order. `discovering` is skipped when the uploader names the objects. */
+export const PROCESSING_STAGES: (ProcessingStage & { id: ProcessingStageId })[] = [
+  { id: "queued", label: "Uploaded", description: "Stored and waiting for a worker" },
+  { id: "discovering", label: "Finding objects", description: "Muse Spark looks at frames to name what to track" },
+  { id: "tracking", label: "Tracking objects", description: "SAM 3.1 segments and tracks each object" },
+  { id: "building_memory", label: "Building memory", description: "Observations, events and the temporal graph" },
+  { id: "analyzing_scene", label: "Spatial relationships", description: "Muse Spark verifies what is on / next to what" },
+  { id: "completed", label: "Ready", description: "Open in Memory Explorer" },
 ];
 
-/** Each of the four transitions takes this long, so a run is 6 s total. */
-export const STAGE_DURATION_MS = 1500;
-
-interface UploadEntry {
-  video: VideoRecord;
-  startedAtMs: number;
-  startedAtIso: string;
+interface ApiJob {
+  id: string;
+  status: string;
+  stage: string | null;
+  stage_detail: string | null;
+  error_message: string | null;
 }
 
-// In-memory store for the prototype. Uploads live only for this page session.
-const uploads: UploadEntry[] = [];
+interface ApiVideo {
+  id: string;
+  original_filename: string;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  object_count: number | null;
+  status: string;
+  requested_concepts: string[] | null;
+  tracked_concepts: string[] | null;
+  created_at: string;
+  processing_job: ApiJob | null;
+}
 
-function jobFor(entry: UploadEntry, now: number): ProcessingJob {
-  const elapsed = now - entry.startedAtMs;
-  const done = elapsed >= STAGE_DURATION_MS * 4;
-  const stageIndex = done ? 4 : Math.floor(elapsed / STAGE_DURATION_MS);
-  const stage = PROCESSING_STAGES[stageIndex]?.id ?? "ready";
+function toStatus(status: string): ProcessingStatus {
+  if (status === "completed") return "ready";
+  if (status === "failed") return "failed";
+  return "processing";
+}
+
+function toJob(video: ApiVideo): ProcessingJob | null {
+  const job = video.processing_job;
+  if (!job) return null;
+  const status = toStatus(video.status);
+  const stage = (
+    status === "ready" ? "completed" : status === "failed" ? "failed" : (job.stage ?? "queued")
+  ) as ProcessingStageId;
+  const index = PROCESSING_STAGES.findIndex((s) => s.id === stage);
   return {
-    id: `job-${entry.video.id}`,
-    videoId: entry.video.id,
-    status: done ? "ready" : "processing",
-    currentStage: stage as ProcessingStageId,
-    progress: Math.min(100, Math.round((elapsed / (STAGE_DURATION_MS * 4)) * 100)),
-    simulated: true,
-    startedAt: entry.startedAtIso,
+    id: job.id,
+    videoId: video.id,
+    status,
+    currentStage: stage,
+    detail: job.stage_detail,
+    progress: status === "ready" ? 100 : Math.round((Math.max(index, 0) / (PROCESSING_STAGES.length - 1)) * 100),
+    error: job.error_message,
   };
 }
 
-function resolved(entry: UploadEntry, now: number): VideoRecord {
-  const job = jobFor(entry, now);
-  return { ...entry.video, status: job.status };
-}
-
-function readDuration(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const el = document.createElement("video");
-    el.preload = "metadata";
-    el.onloadedmetadata = () => resolve(Number.isFinite(el.duration) ? el.duration : 0);
-    el.onerror = () => resolve(0);
-    el.src = url;
-  });
+function toVideo(v: ApiVideo): VideoRecord {
+  return {
+    id: v.id,
+    title: v.original_filename.replace(/\.[^.]+$/, ""),
+    duration: v.duration_seconds ?? 0,
+    status: toStatus(v.status),
+    uploadedAt: v.created_at,
+    objectCount: v.object_count,
+    width: v.width,
+    height: v.height,
+    requestedConcepts: v.requested_concepts ?? [],
+    trackedConcepts: v.tracked_concepts ?? [],
+    videoUrl: videoMediaUrl(v.id),
+    thumbnailUrl: frameUrl(v.id, 500),
+    job: toJob(v),
+  };
 }
 
 export function isAcceptedVideo(file: File): boolean {
@@ -72,52 +96,26 @@ export function isAcceptedVideo(file: File): boolean {
 export const videoService = {
   /** GET /api/v1/videos */
   async listVideos(): Promise<VideoRecord[]> {
-    const now = Date.now();
-    const mine = uploads.map((u) => resolved(u, now)).reverse();
-    return mockLatency([...mine, ...demoVideos], 200);
+    return (await apiFetch<ApiVideo[]>("/videos")).map(toVideo);
   },
 
   /** GET /api/v1/videos/{videoId} */
   async getVideo(videoId: string): Promise<VideoRecord> {
-    const now = Date.now();
-    const upload = uploads.find((u) => u.video.id === videoId);
-    const found = upload ? resolved(upload, now) : demoVideos.find((v) => v.id === videoId);
-    if (!found) throw new Error("Recording not found");
-    return mockLatency(found, 150);
-  },
-
-  /** Processing jobs for uploads in this session (derived from elapsed time). */
-  async listJobs(): Promise<ProcessingJob[]> {
-    const now = Date.now();
-    return uploads.map((u) => jobFor(u, now));
+    return toVideo(await apiFetch<ApiVideo>(`/videos/${encodeURIComponent(videoId)}`));
   },
 
   /**
-   * POST /api/v1/videos
-   * Mock: keeps the file in the browser as an object URL and starts a
-   * simulated, deterministic processing run. Nothing is uploaded or analyzed.
+   * POST /api/v1/videos (multipart). `concepts` is a comma-separated list of objects to
+   * track; leave it empty to let the backend discover them from the video.
    */
-  async uploadVideo(file: File): Promise<VideoRecord> {
+  async uploadVideo(file: File, concepts = ""): Promise<string> {
     if (!isAcceptedVideo(file)) {
-      throw new Error("Unsupported file type. Use MP4, MOV or WebM.");
+      throw new ApiError("Unsupported file type. Use MP4, MOV or WebM.", 415);
     }
-    const url = URL.createObjectURL(file);
-    const duration = await readDuration(url);
-    const now = Date.now();
-    const video: VideoRecord = {
-      id: `vid-upload-${now}`,
-      title: file.name.replace(/\.[^.]+$/, ""),
-      description: "Local file. Processing is simulated; no objects or events are detected.",
-      duration,
-      status: "processing",
-      uploadedAt: new Date(now).toISOString(),
-      objectCount: 0,
-      eventCount: 0,
-      mediaKind: "object-url",
-      videoUrl: url,
-      isDemo: true,
-    };
-    uploads.push({ video, startedAtMs: now, startedAtIso: video.uploadedAt });
-    return video;
+    const form = new FormData();
+    form.append("file", file);
+    if (concepts.trim()) form.append("concepts", concepts.trim());
+    const res = await apiFetch<{ video_id: string }>("/videos", { method: "POST", body: form });
+    return res.video_id;
   },
 };

@@ -20,6 +20,14 @@ export function EvidenceChip({ evidence }: { evidence: EvidenceReference }) {
         active ? "border-accent bg-accent-soft" : "border-line bg-surface",
       )}
     >
+      {evidence.frameUrl && (
+        <img
+          src={evidence.frameUrl}
+          alt=""
+          loading="lazy"
+          className="h-10 w-[72px] shrink-0 rounded-md border border-line bg-elevated object-cover"
+        />
+      )}
       <span
         className={cn(
           "mt-px flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold tabular-nums",

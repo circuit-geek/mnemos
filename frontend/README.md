@@ -1,8 +1,10 @@
 # MNEMOS frontend
 
-Interactive prototype of the MNEMOS spatiotemporal visual memory platform. Everything runs on local mock data; there is no backend, AI inference, auth or database.
+Web UI for the MNEMOS spatiotemporal visual memory platform. It talks to the FastAPI backend (`backend/`) for upload, processing progress, detections, the temporal graph and Muse Spark reasoning.
 
 ```bash
+# backend first (see backend/README.md), then:
+cp .env.example .env   # VITE_API_BASE_URL, default http://localhost:8000
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + production build
@@ -12,14 +14,14 @@ Stack: React, TypeScript (strict), Vite, Tailwind CSS v4, Radix primitives (shad
 
 ## Layout
 
-- `src/mocks` – the 30 s office-desk scenario (objects, observations, relationships, events, evidence, canned answers).
-- `src/services` – async service layer returning mock data. Each method documents the proposed `/api/v1/...` endpoint it will map to. Set `VITE_API_BASE_URL` (see `.env.example`) and swap the bodies for `apiFetch` calls.
+- `src/services` – the only code that calls the backend (`videoService`, `memoryService`, `reasoningService`). They map API responses to the domain types in `src/types`. Endpoints are listed in `docs/api/backend-api.md`.
+- `src/lib/api.ts` – base URL (`VITE_API_BASE_URL`), typed fetch with error handling, media/frame URL helpers.
 - `src/hooks/useTimeline.ts` – the single source of truth for playback time; `ExplorerContext` adds shared selection (object / event / evidence) on top.
-- `src/hooks/useMemoryGraph.ts` – temporal graph view (`validFrom <= t < validTo`) plus highlight state.
+- `src/hooks/useMemoryGraph.ts` – temporal graph view (`validFrom <= t < validTo`) plus highlight state. The explorer loads the full history once (`GET /videos/{id}/memory`) and derives every moment client-side, so seeking costs no requests.
 - `src/components/{video,graph,timeline,chat}` – the Memory Explorer panels.
 
-## Prototype honesty
+## How it behaves
 
-- Uploads stay in the browser (object URLs). Processing is a labeled, deterministic simulation; uploads get no detections, events or graph.
-- The Office Desk Demo has no bundled video, so a labeled scene illustration stands in for it.
-- "Ask MNEMOS" answers a fixed set of questions from mock data and says so for anything else. No LLM is called.
+- **Upload** sends the file (and optional comma-separated objects to track) to the backend, then opens the explorer, which shows the real pipeline stage while the original video plays. It switches to the results when the backend reports completion.
+- **Detections** are drawn from stored observations. An object not detected within 0.5 s of the playhead is shown as not visible; a stale box is never reused.
+- **Ask MNEMOS** shows the actual Muse Spark answer, how the question was interpreted, and its cited evidence with video frames. Failures are shown as errors; nothing falls back to canned answers.

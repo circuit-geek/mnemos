@@ -41,7 +41,16 @@ export function ExplorerProvider({
 }) {
   const timeline = useTimeline(video.duration, memory.events);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
-  const graph = useMemoryGraph(memory, timeline.currentTime, selection);
+  // Evidence from Ask answers is not part of the stored memory; keep it so a click can highlight it.
+  const [answerEvidence, setAnswerEvidence] = useState<EvidenceReference[]>([]);
+  const focusMemory = useMemo(
+    () =>
+      answerEvidence.length === 0
+        ? memory
+        : { ...memory, evidence: [...memory.evidence, ...answerEvidence] },
+    [memory, answerEvidence],
+  );
+  const graph = useMemoryGraph(focusMemory, timeline.currentTime, selection);
   const { seek, pause } = timeline;
 
   const selectObject = useCallback(
@@ -65,6 +74,7 @@ export function ExplorerProvider({
 
   const focusEvidence = useCallback(
     (ev: EvidenceReference) => {
+      setAnswerEvidence((prev) => (prev.some((e) => e.id === ev.id) ? prev : [...prev, ev]));
       pause();
       seek(ev.timestamp);
       setSelection({

@@ -1,8 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { Library, Network } from "lucide-react";
+import { Library } from "lucide-react";
 import { LogoMark } from "@/components/common/Logo";
 import { Tooltip } from "@/components/ui/tooltip";
-import { DEMO_VIDEO_ID } from "@/mocks/objects";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -24,15 +23,6 @@ export function NavRail() {
       <Tooltip label="Library" side="right">
         <NavLink to="/" end className={linkClass} aria-label="Library">
           <Library className="size-[18px]" />
-        </NavLink>
-      </Tooltip>
-      <Tooltip label="Explorer" side="right">
-        <NavLink
-          to={`/explore/${DEMO_VIDEO_ID}`}
-          className={linkClass}
-          aria-label="Memory Explorer"
-        >
-          <Network className="size-[18px]" />
         </NavLink>
       </Tooltip>
       <div className="mt-auto">

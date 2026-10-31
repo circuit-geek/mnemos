@@ -27,6 +27,10 @@ class FakeMemory:
     def get_video_relationships(self, video_id):
         return [REL]
 
+    def get_video_observations(self, video_id):
+        return [{**OBS, "object_id": "o1"}, {**OBS, "observation_id": "b2", "timestamp_ms": 500,
+                                              "object_id": "o2"}]
+
     def get_video_objects(self, video_id):
         return [OBJ, LATE]
 
@@ -177,3 +181,21 @@ async def test_relationships_endpoint_filters_by_time_and_object(client, mp4_fil
     assert (await client.get(base, params={"at_seconds": 1})).json() == []
     assert len((await client.get(base, params={"object_id": "o2"})).json()) == 1
     assert (await client.get(base, params={"object_id": "zzz"})).json() == []
+
+
+async def test_memory_bundle_has_full_history_and_derived_relationship_events(
+    client, mp4_file, with_memory
+):
+    vid = await _video_id(client, mp4_file)
+    bundle = (await client.get(f"/api/v1/videos/{vid}/memory")).json()
+    assert {o["object_id"] for o in bundle["objects"]} == {"o1", "o2"}
+    assert [(o["object_id"], o["timestamp_ms"]) for o in bundle["observations"]] == [
+        ("o1", 0), ("o2", 500)]
+    assert bundle["observations"][1]["evidence_uri"] == f"/api/v1/videos/{vid}/frames/500"
+    kinds = [(e["event_type"], e["start_time_ms"]) for e in bundle["events"]]
+    assert ("RELATIONSHIP_STARTED", 4000) in kinds and ("RELATIONSHIP_ENDED", 9000) in kinds
+    started = next(e for e in bundle["events"] if e["event_type"] == "RELATIONSHIP_STARTED")
+    assert started["relationship_id"] == "r1" and started["related_object_id"] == "o2"
+    assert started["description"] == "mug NEXT_TO mug began"
+    assert [e["start_time_ms"] for e in bundle["events"]] == sorted(
+        e["start_time_ms"] for e in bundle["events"])

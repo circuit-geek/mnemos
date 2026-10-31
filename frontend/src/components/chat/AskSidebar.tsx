@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquareText, Send, X } from "lucide-react";
 import { useExplorer } from "@/hooks/ExplorerContext";
 import { reasoningService } from "@/services/reasoningService";
@@ -11,12 +11,12 @@ let counter = 0;
 const nextId = () => `msg-${Date.now()}-${counter++}`;
 
 export function AskSidebar({ onClose }: { onClose: () => void }) {
-  const { video } = useExplorer();
+  const { video, memory } = useExplorer();
   const [messages, setMessages] = useState<ReasoningMessage[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const suggestions = reasoningService.suggestedQuestions();
+  const suggestions = useMemo(() => reasoningService.suggestedQuestions(memory.objects), [memory.objects]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -31,7 +31,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
       }
       setPending(true);
       try {
-        const res = await reasoningService.ask(video.id, q);
+        const res = await reasoningService.ask(video.id, q, memory);
         setMessages((m) => [
           ...m,
           {
@@ -40,6 +40,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
             content: res.answer,
             createdAt: new Date().toISOString(),
             unsupported: !res.supported,
+            intent: res.intent ?? undefined,
             evidence: res.evidence,
             referencedObjectIds: res.referencedObjectIds,
           },
@@ -59,7 +60,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
         setPending(false);
       }
     },
-    [pending, video.id],
+    [pending, video.id, memory],
   );
 
   const retry = (errorId: string) => {
@@ -81,7 +82,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
       <header className="flex items-center gap-2 border-b border-line px-4 py-3">
         <MessageSquareText className="size-4 text-accent" aria-hidden />
         <h2 className="text-sm font-semibold">Ask MNEMOS</h2>
-        <Badge tone="warning" className="ml-1">Prototype</Badge>
+        <Badge tone="accent" className="ml-1">Muse Spark</Badge>
         <Button variant="ghost" size="icon" className="ml-auto lg:hidden" aria-label="Close Ask MNEMOS" onClick={onClose}>
           <X className="size-4" />
         </Button>
@@ -92,8 +93,8 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
           <div className="flex flex-col gap-2 py-2 text-sm text-muted">
             <p className="font-medium text-fg">Ask about what changed in this recording.</p>
             <p className="text-xs leading-relaxed">
-              Answers come from predefined mock memory data, not a live model, and link back to evidence you can
-              click to jump in the video and graph.
+              Muse Spark answers from this video's stored memory and cites the evidence it used. Click evidence
+              to jump to that moment in the video and graph.
             </p>
           </div>
         )}

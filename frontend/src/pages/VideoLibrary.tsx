@@ -1,41 +1,36 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Film, Upload } from "lucide-react";
+import { AlertCircle, Film, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VideoCard } from "@/components/common/VideoCard";
-import { ProcessingProgress } from "@/components/common/ProcessingProgress";
 import { EmptyState } from "@/components/common/EmptyState";
 import { videoService } from "@/services/videoService";
 
 export default function VideoLibrary() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [concepts, setConcepts] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const videos = useQuery({
     queryKey: ["videos"],
     queryFn: () => videoService.listVideos(),
-    refetchInterval: (q) => (q.state.data?.some((v) => v.status === "processing") ? 250 : false),
-  });
-  const jobs = useQuery({
-    queryKey: ["jobs"],
-    queryFn: () => videoService.listJobs(),
-    refetchInterval: (q) => (q.state.data?.some((j) => j.status === "processing") ? 250 : false),
+    refetchInterval: (q) => (q.state.data?.some((v) => v.status === "processing") ? 2000 : false),
   });
 
   const upload = useMutation({
-    mutationFn: (file: File) => videoService.uploadVideo(file),
-    onSuccess: () => {
+    mutationFn: (file: File) => videoService.uploadVideo(file, concepts),
+    onSuccess: (videoId) => {
       setUploadError(null);
       void queryClient.invalidateQueries({ queryKey: ["videos"] });
-      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      // Watch the pipeline work: the explorer shows live progress, then opens the results.
+      navigate(`/explore/${videoId}`);
     },
     onError: (e: Error) => setUploadError(e.message),
   });
-
-  const activeJobs = (jobs.data ?? []).filter((j) => j.status === "processing");
-  const titleFor = (id: string) => videos.data?.find((v) => v.id === id)?.title ?? "Upload";
 
   return (
     <div className="h-full overflow-y-auto">
@@ -49,7 +44,7 @@ export default function VideoLibrary() {
             Transform video observations into persistent memories. Explore objects, track
             relationships through time, and ask questions about what changed.
           </p>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <input
               ref={inputRef}
               type="file"
@@ -63,27 +58,34 @@ export default function VideoLibrary() {
                 e.target.value = "";
               }}
             />
-            <Button variant="primary" size="lg" onClick={() => inputRef.current?.click()}>
-              <Upload className="size-4" /> Upload Video
+            <label className="flex w-full flex-col gap-1 text-xs text-muted sm:max-w-sm">
+              Objects to track <span className="text-muted/80">(optional, comma-separated; blank = detect automatically)</span>
+              <input
+                value={concepts}
+                onChange={(e) => setConcepts(e.target.value)}
+                placeholder="e.g. mug, notebook, pen"
+                maxLength={200}
+                disabled={upload.isPending}
+                className="h-10 rounded-lg border border-line bg-elevated px-3 text-sm text-fg placeholder:text-muted"
+              />
+            </label>
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={upload.isPending}
+              onClick={() => inputRef.current?.click()}
+            >
+              {upload.isPending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+              {upload.isPending ? "Uploading…" : "Upload Video"}
             </Button>
-            <span className="text-xs text-muted">
-              MP4, MOV or WebM · stays in your browser · processing is a demo simulation
-            </span>
           </div>
+          <p className="text-xs text-muted">MP4, MOV or WebM · analyzed by SAM 3.1 and Muse Spark</p>
           {uploadError && (
             <p role="alert" className="flex items-center gap-2 text-sm text-warning">
               <AlertCircle className="size-4" /> {uploadError}
             </p>
           )}
         </header>
-
-        {activeJobs.length > 0 && (
-          <div className="flex flex-col gap-3">
-            {activeJobs.map((job) => (
-              <ProcessingProgress key={job.id} job={job} title={titleFor(job.videoId)} />
-            ))}
-          </div>
-        )}
 
         <section aria-labelledby="recordings-heading" className="flex flex-col gap-4">
           <h2 id="recordings-heading" className="text-sm font-medium uppercase tracking-wider text-muted">
@@ -99,6 +101,7 @@ export default function VideoLibrary() {
             <EmptyState
               icon={<AlertCircle className="size-5" />}
               title="Couldn't load recordings"
+              description={videos.error.message}
               action={<Button onClick={() => void videos.refetch()}>Try again</Button>}
             />
           ) : videos.data.length === 0 ? (

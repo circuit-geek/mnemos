@@ -7,9 +7,11 @@ from backend.core.exceptions import MemoryUnavailableError
 from backend.reasoning.models import Answer
 from backend.reasoning.reasoning_service import ReasoningService
 from backend.schemas.memory import (
+    FullObservation,
     GraphEdge,
     GraphNode,
     GraphSnapshot,
+    MemoryBundle,
     MemoryEvent,
     MemoryObject,
     MemoryObservation,
@@ -68,6 +70,35 @@ class MemoryQueryService:
                 {**row, "evidence_uri": frame_url(video_id, row["evidence_timestamp_ms"])}
             ))
         return found
+
+    async def bundle(self, video_id: uuid.UUID) -> MemoryBundle:
+        """Full history in one response. Relationship start/end events are derived from the
+        stored relationship intervals, not stored or invented."""
+        rows = await asyncio.to_thread(self.repository.get_video_observations, str(video_id))
+        objects = await self.objects(video_id)
+        relationships = await self.relationships(video_id)
+        events = await self.events(video_id)
+        labels = {o.object_id: o.label for o in objects}
+        for r in relationships:
+            subject = labels.get(r.subject_object_id, "?")
+            target = labels.get(r.target_object_id, "?")
+            for suffix, at, kind, verb in (
+                ("start", r.valid_from_ms, "RELATIONSHIP_STARTED", "began"),
+                ("end", r.valid_to_ms, "RELATIONSHIP_ENDED", "ended"),
+            ):
+                if at is None:
+                    continue
+                events.append(MemoryEvent(
+                    event_id=f"{r.relationship_id}:{suffix}", object_id=r.subject_object_id,
+                    related_object_id=r.target_object_id, relationship_id=r.relationship_id,
+                    event_type=kind, start_time_ms=at, end_time_ms=at, confidence=r.confidence,
+                    description=f"{subject} {r.relation_type} {target} {verb}",
+                ))
+        events.sort(key=lambda e: (e.start_time_ms, e.event_id))
+        observations = [FullObservation.model_validate(
+            {**row, "evidence_uri": frame_url(video_id, row["timestamp_ms"])}) for row in rows]
+        return MemoryBundle(video_id=str(video_id), objects=objects, observations=observations,
+                            events=events, relationships=relationships)
 
     async def object_history(self, video_id: uuid.UUID, object_id: str) -> list[MemoryObservation]:
         rows = await asyncio.to_thread(self.repository.get_object_history, str(video_id), object_id)

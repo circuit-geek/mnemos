@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.base import Base
@@ -21,6 +21,9 @@ class ProcessingJob(Base):
     job_type: Mapped[JobType] = mapped_column(
         string_enum(JobType), default=JobType.VIDEO_PROCESSING
     )
+    # Pipeline stage actually reached (see services.video_processing.Stage) and a short note.
+    stage: Mapped[str | None] = mapped_column(String(32))
+    stage_detail: Mapped[str | None] = mapped_column(String(255))
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
