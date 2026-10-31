@@ -24,8 +24,12 @@ EVENTS = [
 
 
 class FakeRepository:
-    def __init__(self, objects=(MUG,)):
+    def __init__(self, objects=(MUG,), relationships=()):
         self.objects = list(objects)
+        self.relationships = list(relationships)
+
+    def get_video_relationships(self, video_id):
+        return self.relationships
 
     def get_video_objects(self, video_id):
         return self.objects

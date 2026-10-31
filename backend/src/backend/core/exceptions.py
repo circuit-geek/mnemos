@@ -24,3 +24,11 @@ class SamProcessingError(MnemosError):
 
 class StorageError(MnemosError):
     pass
+
+
+class MemoryUnavailableError(MnemosError):
+    """Temporal memory (Neo4j) or reasoning (Muse) is not configured."""
+
+
+class FrameNotFoundError(MnemosError):
+    """No frame could be extracted at the requested timestamp."""

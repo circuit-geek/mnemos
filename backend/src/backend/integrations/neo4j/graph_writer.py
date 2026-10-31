@@ -5,7 +5,8 @@ from datetime import datetime
 from typing import Protocol
 
 from backend.integrations.meta.sam_models import VideoProcessingResult
-from backend.memory.models import MemoryBatch, Observation, TrackedObject, Video
+from backend.memory.events import EventDetector
+from backend.memory.models import MemoryBatch, Observation, Relationship, TrackedObject, Video
 from backend.memory.repository import Neo4jMemoryRepository
 from backend.memory.transformer import stable_id
 
@@ -21,6 +22,10 @@ class GraphWriter(Protocol):
         result: VideoProcessingResult,
     ) -> None: ...
 
+    async def write_relationships(
+        self, video_id: uuid.UUID, relationships: list[Relationship]
+    ) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -30,6 +35,9 @@ class NullGraphWriter:
     async def write_video_graph(self, video_id, filename, created_at, result) -> None:
         logger.info("Neo4j disabled; skipping graph update video_id=%s", video_id)
 
+    async def write_relationships(self, video_id, relationships) -> None:
+        return None
+
     async def close(self) -> None:
         return None
 
@@ -37,7 +45,8 @@ class NullGraphWriter:
 class Neo4jGraphWriter:
     """Writes Video/Object/Observation nodes via the existing synchronous repository.
 
-    Only facts present in the SAM output are written; no relationships are inferred.
+    Only facts present in the SAM output are written; events come from the deterministic
+    EventDetector.
     The write is idempotent (stable IDs + MERGE), so re-processing does not duplicate.
     """
 
@@ -54,7 +63,14 @@ class Neo4jGraphWriter:
 
     async def write_video_graph(self, video_id, filename, created_at, result) -> None:
         batch = build_memory_batch(video_id, filename, created_at, result)
-        await asyncio.to_thread(self.repository.ingest, batch, [])
+        events = EventDetector().detect(batch)
+        logger.info("Detected %d events video_id=%s", len(events), video_id)
+        await asyncio.to_thread(self.repository.ingest, batch, events)
+
+    async def write_relationships(self, video_id, relationships) -> None:
+        await asyncio.to_thread(
+            self.repository.replace_relationships, str(video_id), relationships
+        )
 
     async def close(self) -> None:
         await asyncio.to_thread(self.repository.close)

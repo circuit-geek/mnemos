@@ -32,6 +32,8 @@ class VideoProcessingResult(BaseModel):
     frame_count: int | None = None
     width: int | None = None
     height: int | None = None
+    # Concepts SAM was run for (requested or discovered), whether or not each produced tracks.
+    concepts: list[str] = Field(default_factory=list)
     objects: list[TrackedObjectResult] = Field(default_factory=list)
     observations: list[ObservationResult] = Field(default_factory=list)
 

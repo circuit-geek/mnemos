@@ -5,6 +5,8 @@ from fastapi import BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.container import AppContainer
+from backend.services.frames import FrameService
+from backend.services.memory_queries import MemoryQueryService
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_queries import VideoQueryService
 from backend.workers.dispatcher import BackgroundTasksDispatcher
@@ -35,3 +37,14 @@ def get_ingestion_service(
 
 def get_query_service(session: AsyncSession = Depends(get_session)) -> VideoQueryService:
     return VideoQueryService(session)
+
+
+def get_memory_service(container: AppContainer = Depends(get_container)) -> MemoryQueryService:
+    return MemoryQueryService(container.memory, container.reasoning)
+
+
+def get_frame_service(
+    session: AsyncSession = Depends(get_session),
+    container: AppContainer = Depends(get_container),
+) -> FrameService:
+    return FrameService(session, container.storage)

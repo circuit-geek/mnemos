@@ -33,6 +33,8 @@ class VideoRead(BaseModel):
     size_bytes: int
     duration_seconds: float | None = None
     status: VideoStatus
+    requested_concepts: list[str] | None = None
+    tracked_concepts: list[str] | None = None
     created_at: datetime
     processing_job: ProcessingJobRead | None = None
 

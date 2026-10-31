@@ -17,7 +17,7 @@ class NoopDispatcher:
 
 
 class FailingSam:
-    async def process_video(self, video_path):
+    async def process_video(self, video_path, concepts=None):
         raise SamProcessingError("boom")
 
 

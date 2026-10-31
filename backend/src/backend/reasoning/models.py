@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -30,11 +31,21 @@ class QueryIntent(ReasoningModel):
     time_seconds: float | None = Field(default=None, ge=0)
     start_seconds: float | None = Field(default=None, ge=0)
     end_seconds: float | None = Field(default=None, ge=0)
+    relation_type: Literal["ON", "NEXT_TO", "NEAR", "INSIDE"] | None = None
+    before_appearance_of: str | None = None
 
-    @field_validator("object_label")
+    @field_validator("object_label", "before_appearance_of")
     @classmethod
     def blank_label_is_none(cls, value):
         return value.strip() or None if value else None
+
+    @field_validator("relation_type", mode="before")
+    @classmethod
+    def normalize_relation(cls, value):
+        # Unknown relation words mean "any relation"; CONTAINS is the inverse of INSIDE.
+        value = str(value).strip().upper().replace(" ", "_") if value else None
+        value = "INSIDE" if value == "CONTAINS" else value
+        return value if value in {"ON", "NEXT_TO", "NEAR", "INSIDE"} else None
 
 
 class Evidence(ReasoningModel):

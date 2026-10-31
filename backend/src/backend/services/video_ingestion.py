@@ -49,7 +49,11 @@ class VideoIngestionService:
         self.jobs = ProcessingJobRepository(session)
 
     async def ingest(
-        self, data: BinaryIO, original_filename: str | None, content_type: str | None
+        self,
+        data: BinaryIO,
+        original_filename: str | None,
+        content_type: str | None,
+        concepts: list[str] | None = None,
     ) -> tuple[Video, ProcessingJob]:
         content_type = (content_type or "").split(";")[0].strip().lower()
         size = self._validate(data, content_type)
@@ -75,6 +79,7 @@ class VideoIngestionService:
                     content_type=content_type,
                     storage_key=storage_key,
                     size_bytes=size,
+                    requested_concepts=concepts,
                     status=VideoStatus.UPLOADED,
                 )
             )

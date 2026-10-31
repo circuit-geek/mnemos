@@ -1,14 +1,16 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Path, Query, Response, UploadFile, status
 
-from backend.api.dependencies import get_ingestion_service, get_query_service
+from backend.api.dependencies import get_frame_service, get_ingestion_service, get_query_service
+from backend.core.concepts import parse_concepts
 from backend.schemas.videos import (
     ObservationRead,
     ProcessingJobRead,
     VideoAcceptedResponse,
     VideoRead,
 )
+from backend.services.frames import FrameService
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_queries import VideoQueryService
 
@@ -18,9 +20,16 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=VideoAcceptedResponse)
 async def upload_video(
     file: UploadFile = File(...),
+    concepts: str | None = Form(
+        None,
+        description="Comma-separated objects to track (e.g. 'mug, notebook'). "
+        "Omit to let the model discover them from the video.",
+    ),
     service: VideoIngestionService = Depends(get_ingestion_service),
 ) -> VideoAcceptedResponse:
-    video, job = await service.ingest(file.file, file.filename, file.content_type)
+    video, job = await service.ingest(
+        file.file, file.filename, file.content_type, parse_concepts(concepts)
+    )
     return VideoAcceptedResponse(video_id=video.id, job_id=job.id, status=video.status)
 
 
@@ -42,3 +51,13 @@ async def list_observations(
     service: VideoQueryService = Depends(get_query_service),
 ) -> list[ObservationRead]:
     return await service.list_observations(video_id, limit, offset)
+
+
+@router.get("/{video_id}/frames/{timestamp_ms}", response_class=Response)
+async def get_frame(
+    video_id: uuid.UUID,
+    timestamp_ms: int = Path(ge=0),
+    service: FrameService = Depends(get_frame_service),
+) -> Response:
+    jpeg = await service.frame_jpeg(video_id, timestamp_ms)
+    return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})

@@ -5,25 +5,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.integrations.meta.sam_client import SamClient
 from backend.integrations.meta.sam_models import VideoProcessingResult
-from backend.integrations.neo4j.graph_writer import GraphWriter
+from backend.integrations.neo4j.graph_writer import GraphWriter, build_memory_batch
 from backend.integrations.storage.base import ObjectStorage
 from backend.models import Observation, TrackedObject, Video, VideoStatus
 from backend.repositories.observations import ObservationRepository
 from backend.repositories.processing_jobs import ProcessingJobRepository
 from backend.repositories.tracked_objects import TrackedObjectRepository
 from backend.repositories.videos import VideoRepository
+from backend.scene.scene_service import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
 class VideoProcessingService:
     def __init__(
-        self, session: AsyncSession, storage: ObjectStorage, sam: SamClient, graph: GraphWriter
+        self,
+        session: AsyncSession,
+        storage: ObjectStorage,
+        sam: SamClient,
+        graph: GraphWriter,
+        scene: SceneAnalyzer | None = None,
     ) -> None:
         self.session = session
         self.storage = storage
         self.sam = sam
         self.graph = graph
+        self.scene = scene
         self.videos = VideoRepository(session)
         self.jobs = ProcessingJobRepository(session)
         self.tracked_objects = TrackedObjectRepository(session)
@@ -43,7 +50,7 @@ class VideoProcessingService:
             logger.info("Processing started %s", ids)
 
             async with self.storage.open_local_copy(video.storage_key) as video_path:
-                result = await self.sam.process_video(video_path)
+                result = await self.sam.process_video(video_path, video.requested_concepts)
             logger.info(
                 "SAM processing finished %s objects=%d observations=%d",
                 ids,
@@ -59,6 +66,8 @@ class VideoProcessingService:
             )
             logger.info("Graph update finished %s", ids)
 
+            await self._analyze_scene(video, result, ids)
+
             await self.videos.set_status(video, VideoStatus.COMPLETED)
             await self.jobs.mark_completed(job)
             await self.session.commit()
@@ -66,6 +75,22 @@ class VideoProcessingService:
         except Exception as exc:
             logger.exception("Processing failed %s", ids)
             await self._mark_failed(video_id, job_id, exc)
+
+    async def _analyze_scene(self, video: Video, result: VideoProcessingResult, ids: str) -> None:
+        """Spatial relations enrich the temporal memory; if they fail the video still completes
+        with its temporal memory, and the failure is logged."""
+        if self.scene is None:
+            return
+        try:
+            batch = build_memory_batch(video.id, video.original_filename, video.created_at, result)
+            async with self.storage.open_local_copy(video.storage_key) as video_path:
+                relationships = await self.scene.analyze(
+                    video_path, batch, (result.width, result.height)
+                )
+            await self.graph.write_relationships(video.id, relationships)
+            logger.info("Spatial relationships stored %s count=%d", ids, len(relationships))
+        except Exception:
+            logger.exception("Scene analysis failed; continuing without spatial memory %s", ids)
 
     async def _persist(self, video: Video, result: VideoProcessingResult) -> None:
         # Re-processing replaces earlier output instead of duplicating it.
@@ -98,6 +123,7 @@ class VideoProcessingService:
                 for o in result.observations
             ]
         )
+        video.tracked_concepts = result.concepts or None
         if result.duration_seconds is not None:
             video.duration_seconds = result.duration_seconds
 

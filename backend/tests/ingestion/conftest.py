@@ -26,6 +26,9 @@ class RecordingGraphWriter:
     async def write_video_graph(self, video_id, filename, created_at, result) -> None:
         self.calls.append((video_id, filename, result))
 
+    async def write_relationships(self, video_id, relationships) -> None:
+        return None
+
     async def close(self) -> None:
         return None
 

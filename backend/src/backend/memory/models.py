@@ -66,6 +66,38 @@ class Event(MemoryModel):
         return self
 
 
+SpatialRelationType = Literal["ON", "NEXT_TO", "NEAR", "INSIDE"]
+SPATIAL_RELATION_TYPES: tuple[str, ...] = ("ON", "NEXT_TO", "NEAR", "INSIDE")
+
+
+class Relationship(MemoryModel):
+    """A spatial relation verified on sampled frames, holding over [valid_from_ms, valid_to_ms).
+
+    `valid_to_ms` is None while the relation was still holding at the last verification.
+    Bounds are only as precise as the frame sampling interval.
+    """
+
+    relationship_id: str
+    video_id: str
+    subject_object_id: str
+    target_object_id: str
+    relation_type: SpatialRelationType
+    valid_from_ms: int = Field(ge=0)
+    valid_to_ms: int | None = Field(default=None, ge=0)
+    last_verified_ms: int = Field(ge=0)
+    evidence_timestamp_ms: int = Field(ge=0)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_interval(self):
+        if self.valid_to_ms is not None and self.valid_to_ms <= self.valid_from_ms:
+            raise ValueError("relationship end must follow its start")
+        if self.subject_object_id == self.target_object_id:
+            raise ValueError("relationship needs two distinct objects")
+        return self
+
+
 class MemoryBatch(MemoryModel):
     video: Video
     objects: list[TrackedObject]

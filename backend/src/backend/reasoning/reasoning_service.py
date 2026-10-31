@@ -4,22 +4,30 @@ import logging
 
 from pydantic import ValidationError
 
-from .models import Answer, Evidence, Intent, ModelAnswer, ModelResponseError, QueryIntent
+from .models import Answer, Evidence, ModelAnswer, ModelResponseError, QueryIntent
 from .retrieval import GraphRetriever
 
 logger = logging.getLogger(__name__)
 
 INTERPRET_INSTRUCTIONS = """You classify a user's question about a recorded video's object memory.
 Return ONLY a JSON object: {"intent": ..., "object_label": string|null, "time_seconds": number|null,
-"start_seconds": number|null, "end_seconds": number|null}.
+"start_seconds": number|null, "end_seconds": number|null,
+"relation_type": "ON"|"NEXT_TO"|"NEAR"|"INSIDE"|null, "before_appearance_of": string|null}.
 Intents:
 - LAST_SEEN: when/where an object was last seen, disappeared, vanished, left, went missing.
 - OBJECT_HISTORY: what happened to an object overall, its timeline.
 - CHANGES: what changed in the video or within a time window (set start/end seconds if given).
 - SCENE_AT_TIME: what was happening at one specific moment (set time_seconds; object_label if one is named).
-- RELATIONSHIPS: spatial relations between objects (on, next to, inside, near).
+- RELATIONSHIPS: spatial relations between objects (on, next to, inside, near, contains). Set
+  object_label to the object asked about, relation_type if one relation is asked for ("what is the mug on"
+  -> ON; "what is inside the bag" -> object_label bag, relation_type INSIDE), and time_seconds or
+  start/end seconds if a moment or window is given. Omit times to get how relations evolved overall.
 - UNSUPPORTED: anything else.
-object_label must be one of known_objects (copy it exactly) or null. Convert times to seconds ("1:05" -> 65)."""
+object_label and before_appearance_of must be one of known_objects (copy exactly) or null.
+Use before_appearance_of for "before the notebook appeared" (then leave time_seconds null).
+Set relation_type only when the question asks for a relation between tracked objects; a surface that is
+not in known_objects ("on the desk", "on the table") is not a relation filter, so leave relation_type null.
+Convert times to seconds ("1:05" -> 65)."""
 
 ANSWER_INSTRUCTIONS = """You answer questions about a video using ONLY the evidence items provided.
 Return ONLY a JSON object: {"answer": string, "evidence_ids": [string], "sufficient_evidence": boolean}.
@@ -28,6 +36,12 @@ Rules:
 - Times are seconds from the start of the recording.
 - NO_LONGER_VISIBLE means the tracker stopped detecting the object. It is NOT proof the object physically
   disappeared or left; it may be occluded or missed. Say so, and use wording like "was no longer detected".
+- Spatial relationships were verified by a vision model on frames sampled every few seconds. Their start and
+  end times are accurate only to that sampling interval, and a relation with no end was still holding when it
+  was last checked. A relation not listed was not verified; it does not prove the objects were unrelated.
+  An object leaving view does not end its relation. A surface such as a desk or table is not a tracked
+  object: for "what was on the desk", answer with the tracked objects that were present and any verified
+  relations between them, and say the surface itself is not tracked.
 - Track identities are scoped to this recording and are not verified physical identities.
 - sufficient_evidence is about whether the evidence answers the question as far as detection data allows.
   Report detection gaps with their caveat and keep sufficient_evidence true; only set it false when the

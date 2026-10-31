@@ -2,8 +2,15 @@
 
 from neo4j import GraphDatabase
 
-from .models import Event, MemoryBatch, Observation, TrackedObject, Video
-
+from .models import (
+    SPATIAL_RELATION_TYPES,
+    Event,
+    MemoryBatch,
+    Observation,
+    Relationship,
+    TrackedObject,
+    Video,
+)
 
 SCHEMA = (
     "CREATE CONSTRAINT video_id_unique IF NOT EXISTS FOR (n:Video) REQUIRE n.video_id IS UNIQUE",
@@ -59,6 +66,33 @@ WITH e
 UNWIND $source_observation_ids AS source_id
 MATCH (source:Observation {observation_id: source_id})
 MERGE (e)-[:DERIVED_FROM]->(source)
+"""
+
+
+DELETE_RELATIONSHIPS = (
+    "MATCH (:Video {video_id: $video_id})-[:HAS_OBJECT]->(:Object)"
+    f"-[r:{'|'.join(SPATIAL_RELATION_TYPES)}]->(:Object) DELETE r"
+)
+
+# Relationship types cannot be query parameters; they come from this closed set, never from input.
+CREATE_RELATIONSHIP = {
+    relation_type: f"""
+MATCH (a:Object {{object_id: $subject_object_id}})
+MATCH (b:Object {{object_id: $target_object_id}})
+MERGE (a)-[r:{relation_type} {{relationship_id: $relationship_id}}]->(b)
+SET r.video_id = $video_id, r.valid_from_ms = $valid_from_ms, r.valid_to_ms = $valid_to_ms,
+    r.last_verified_ms = $last_verified_ms, r.evidence_timestamp_ms = $evidence_timestamp_ms,
+    r.confidence = $confidence, r.reason = $reason
+"""
+    for relation_type in SPATIAL_RELATION_TYPES
+}
+
+GET_RELATIONSHIPS = f"""
+MATCH (:Video {{video_id: $video_id}})-[:HAS_OBJECT]->(a:Object)
+      -[r:{'|'.join(SPATIAL_RELATION_TYPES)}]->(b:Object)
+RETURN r, type(r) AS relation_type, a.object_id AS subject_object_id,
+       b.object_id AS target_object_id
+ORDER BY r.valid_from_ms, r.relationship_id
 """
 
 
@@ -145,6 +179,25 @@ class Neo4jMemoryRepository:
 
         with self.driver.session(database=self.database) as session:
             return session.execute_write(write)
+
+    def replace_relationships(self, video_id: str, relationships: list[Relationship]) -> None:
+        """Replace a video's spatial relations atomically; re-analysis must not accumulate stale ones."""
+        def write(tx):
+            tx.run(DELETE_RELATIONSHIPS, video_id=video_id).consume()
+            for relationship in relationships:
+                tx.run(CREATE_RELATIONSHIP[relationship.relation_type],
+                       **relationship.model_dump(exclude={"relation_type"})).consume()
+
+        with self.driver.session(database=self.database) as session:
+            session.execute_write(write)
+
+    def get_video_relationships(self, video_id: str) -> list[dict]:
+        with self.driver.session(database=self.database) as session:
+            records = session.execute_read(
+                lambda tx: list(tx.run(GET_RELATIONSHIPS, video_id=video_id)))
+        return [{**dict(r["r"]), "relation_type": r["relation_type"],
+                 "subject_object_id": r["subject_object_id"],
+                 "target_object_id": r["target_object_id"]} for r in records]
 
     def get_video_objects(self, video_id: str) -> list[dict]:
         query = """MATCH (:Video {video_id: $video_id})-[:HAS_OBJECT]->(o:Object)

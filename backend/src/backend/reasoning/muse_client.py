@@ -1,5 +1,6 @@
 """Thin Muse Spark client: one JSON-in/JSON-out call through Meta's OpenAI-compatible API."""
 
+import base64
 import json
 import re
 
@@ -33,11 +34,18 @@ class MuseClient:
         self._client = client
         self.model = model
 
-    def generate_json(self, instructions: str, payload: dict) -> dict:
+    def generate_json(self, instructions: str, payload: dict,
+                      images: list[bytes] | None = None) -> dict:
+        content = json.dumps(payload, ensure_ascii=False)
+        if images:
+            parts = [{"type": "input_text", "text": content}]
+            parts += [{"type": "input_image",
+                       "image_url": f"data:image/jpeg;base64,{base64.b64encode(image).decode()}"}
+                      for image in images]
+            content = [{"role": "user", "content": parts}]
         try:
             response = self._client.responses.create(
-                model=self.model, instructions=instructions,
-                input=json.dumps(payload, ensure_ascii=False))
+                model=self.model, instructions=instructions, input=content)
         except Exception as error:
             raise ModelResponseError(f"Muse Spark request failed: {error}") from error
         return parse_json_object(response.output_text)
