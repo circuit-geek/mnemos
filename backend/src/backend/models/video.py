@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, String
+from sqlalchemy import BigInteger, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.base import Base
@@ -26,6 +26,8 @@ class Video(Base):
     )
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
     # What the uploader asked to track (None = let the model discover it) and what was tracked.
     requested_concepts: Mapped[list[str] | None] = mapped_column(JSONType)
     tracked_concepts: Mapped[list[str] | None] = mapped_column(JSONType)

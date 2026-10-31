@@ -6,12 +6,15 @@
 
 export type ProcessingStatus = "processing" | "ready" | "failed";
 
+/** Mirrors the backend job stage; each is reported only when that work actually starts. */
 export type ProcessingStageId =
-  | "uploaded"
-  | "perception"
+  | "queued"
+  | "discovering"
   | "tracking"
-  | "memory"
-  | "ready";
+  | "building_memory"
+  | "analyzing_scene"
+  | "completed"
+  | "failed";
 
 export interface ProcessingStage {
   id: ProcessingStageId;
@@ -19,20 +22,18 @@ export interface ProcessingStage {
   description: string;
 }
 
-/** Progress of a (simulated) processing run. */
+/** Progress of a real processing run, derived from the stage the backend reports. */
 export interface ProcessingJob {
   id: string;
   videoId: string;
   status: ProcessingStatus;
   currentStage: ProcessingStageId;
-  /** 0–100 overall progress. */
+  /** Backend note for the stage, e.g. "2/4 tracked: mug, pen, notebook". */
+  detail: string | null;
+  /** 0–100, by stage reached (not a time estimate). */
   progress: number;
-  /** True while the pipeline is a browser-only demo simulation. */
-  simulated: boolean;
-  startedAt: string;
+  error: string | null;
 }
-
-export type MediaKind = "scene-illustration" | "object-url";
 
 export interface VideoRecord {
   id: string;
@@ -42,14 +43,20 @@ export interface VideoRecord {
   duration: number;
   status: ProcessingStatus;
   uploadedAt: string; // ISO 8601
-  objectCount: number;
-  eventCount: number;
-  /** "scene-illustration" = bundled placeholder; "object-url" = a real local file. */
-  mediaKind: MediaKind;
-  /** Present only when a real video file is attached (blob: URL). */
-  videoUrl?: string;
-  /** True when the record is mock/demo data rather than a real analysis. */
-  isDemo: boolean;
+  /** Tracked objects found; null while unknown. */
+  objectCount: number | null;
+  /** Pixel size of the source frames; needed to normalise detection boxes. */
+  width: number | null;
+  height: number | null;
+  /** What the uploader asked to track; empty means the objects were discovered automatically. */
+  requestedConcepts: string[];
+  /** What the pipeline tracked (requested by the uploader or discovered). */
+  trackedConcepts: string[];
+  /** Playable original video served by the backend. */
+  videoUrl: string;
+  /** A frame from the video, for cards. */
+  thumbnailUrl: string;
+  job: ProcessingJob | null;
 }
 
 /** Normalised bounding box: all values 0–1 relative to the video frame. */
@@ -129,6 +136,8 @@ export interface MemoryEvent {
 export interface EvidenceReference {
   id: string;
   timestamp: number;
+  /** The video frame at `timestamp`, served by the backend, when available. */
+  frameUrl?: string;
   objectIds: string[];
   eventId?: string;
   relationshipIds?: string[];
@@ -142,8 +151,10 @@ export interface ReasoningMessage {
   role: ReasoningRole;
   content: string;
   createdAt: string;
-  /** Marks assistant replies for queries the prototype doesn't support. */
+  /** The backend found too little evidence in memory to answer. */
   unsupported?: boolean;
+  /** How the question was interpreted, e.g. "RELATIONSHIPS · mug". */
+  intent?: string;
   error?: boolean;
   evidence?: EvidenceReference[];
   referencedObjectIds?: string[];
@@ -151,7 +162,9 @@ export interface ReasoningMessage {
 
 export interface AskResponse {
   answer: string;
+  /** False when memory held too little evidence to answer. */
   supported: boolean;
+  intent: string | null;
   evidence: EvidenceReference[];
   referencedObjectIds: string[];
 }

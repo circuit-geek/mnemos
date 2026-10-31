@@ -74,6 +74,12 @@ export function ObjectInspector({ objectId, onClose }: { objectId: string; onClo
     [memory.observations, objectId],
   );
   const current = graph.snapshot.nodes.find((n) => n.id === objectId);
+  // A tracked object has an observation per frame; show an even sample, always keeping first and last.
+  const sampledObs = useMemo(() => {
+    const MAX = 24;
+    if (obsList.length <= MAX) return obsList;
+    return Array.from({ length: MAX }, (_, i) => obsList[Math.round((i * (obsList.length - 1)) / (MAX - 1))]!);
+  }, [obsList]);
 
   if (!object) return null;
   const firstObs = obsList[0];
@@ -164,9 +170,16 @@ export function ObjectInspector({ objectId, onClose }: { objectId: string; onClo
           </ul>
         )}
 
-        <h4 className="mb-1.5 mt-4 font-semibold">Evidence timestamps</h4>
+        <h4 className="mb-1.5 mt-4 font-semibold">
+          Evidence timestamps{" "}
+          {obsList.length > sampledObs.length && (
+            <span className="font-normal text-muted">
+              (sample of {obsList.length} detections)
+            </span>
+          )}
+        </h4>
         <ul className="flex flex-wrap gap-1.5">
-          {obsList.map((o) => (
+          {sampledObs.map((o) => (
             <li key={o.id}>
               <button
                 type="button"

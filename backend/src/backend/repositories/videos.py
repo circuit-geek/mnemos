@@ -1,8 +1,9 @@
 import uuid
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import Video, VideoStatus
+from backend.models import TrackedObject, Video, VideoStatus
 
 
 class VideoRepository:
@@ -20,3 +21,18 @@ class VideoRepository:
     async def set_status(self, video: Video, status: VideoStatus) -> None:
         video.status = status
         await self.session.flush()
+
+    async def list_recent(self, limit: int) -> list[tuple[Video, int]]:
+        """Newest first, each with its tracked-object count."""
+        counts = (
+            select(TrackedObject.video_id, func.count().label("n"))
+            .group_by(TrackedObject.video_id)
+            .subquery()
+        )
+        stmt = (
+            select(Video, func.coalesce(counts.c.n, 0))
+            .outerjoin(counts, counts.c.video_id == Video.id)
+            .order_by(Video.created_at.desc())
+            .limit(limit)
+        )
+        return [(video, n) for video, n in (await self.session.execute(stmt)).all()]

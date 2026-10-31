@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -15,9 +16,16 @@ from backend.reasoning.muse_client import MuseClient
 logger = logging.getLogger(__name__)
 
 
+# Reports (stage, detail) as processing advances, e.g. ("tracking", "2/4 objects tracked").
+ProgressReporter = Callable[[str, str | None], Awaitable[None]]
+
+
 class SamClient(Protocol):
     async def process_video(
-        self, video_path: Path, concepts: list[str] | None = None
+        self,
+        video_path: Path,
+        concepts: list[str] | None = None,
+        progress: ProgressReporter | None = None,
     ) -> VideoProcessingResult:
         """`concepts` are the objects to track; None means work out what is in the video."""
 
@@ -29,7 +37,10 @@ class MockSamClient:
         self.fixture_dir = fixture_dir
 
     async def process_video(
-        self, video_path: Path, concepts: list[str] | None = None
+        self,
+        video_path: Path,
+        concepts: list[str] | None = None,
+        progress: ProgressReporter | None = None,
     ) -> VideoProcessingResult:
         return await asyncio.to_thread(parse_sam_artifacts, self.fixture_dir)
 
@@ -55,10 +66,14 @@ class ScriptSamClient:
         self.fallback_concept = fallback_concept
         self._slots = asyncio.Semaphore(concurrency)
 
-    async def _concepts_for(self, video_path: Path, requested: list[str] | None) -> list[str]:
+    async def _concepts_for(
+        self, video_path: Path, requested: list[str] | None, progress: ProgressReporter | None
+    ) -> list[str]:
         """The uploader's concepts win; otherwise ask the model what is in this video."""
         if requested:
             return requested
+        if progress:
+            await progress("discovering", "Looking at the video to find objects to track")
         try:
             discovered = await self.discoverer.discover(video_path)
         except Exception:
@@ -70,14 +85,29 @@ class ScriptSamClient:
         return discovered
 
     async def process_video(
-        self, video_path: Path, concepts: list[str] | None = None
+        self,
+        video_path: Path,
+        concepts: list[str] | None = None,
+        progress: ProgressReporter | None = None,
     ) -> VideoProcessingResult:
         """One SAM run per concept (the script tracks a single concept at a time), then merge."""
-        concepts = await self._concepts_for(video_path, concepts)
+        concepts = await self._concepts_for(video_path, concepts, progress)
         logger.info("SAM concepts %s", concepts)
-        outcomes = await asyncio.gather(
-            *(self._run_concept(video_path, c) for c in concepts), return_exceptions=True
-        )
+        names = ", ".join(concepts)
+        finished = 0
+
+        async def track(concept: str):
+            nonlocal finished
+            try:
+                return await self._run_concept(video_path, concept)
+            finally:
+                finished += 1
+                if progress:
+                    await progress("tracking", f"{finished}/{len(concepts)} tracked: {names}")
+
+        if progress:
+            await progress("tracking", f"0/{len(concepts)} tracked: {names}")
+        outcomes = await asyncio.gather(*(track(c) for c in concepts), return_exceptions=True)
         results: list[tuple[str, VideoProcessingResult]] = []
         failures: list[str] = []
         for concept, outcome in zip(concepts, outcomes, strict=True):

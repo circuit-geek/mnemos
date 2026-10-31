@@ -1,8 +1,15 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, Path, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 
-from backend.api.dependencies import get_frame_service, get_ingestion_service, get_query_service
+from backend.api.dependencies import (
+    get_container,
+    get_frame_service,
+    get_ingestion_service,
+    get_query_service,
+)
+from backend.container import AppContainer
 from backend.core.concepts import parse_concepts
 from backend.schemas.videos import (
     ObservationRead,
@@ -33,14 +40,41 @@ async def upload_video(
     return VideoAcceptedResponse(video_id=video.id, job_id=job.id, status=video.status)
 
 
+def _read(video, job, object_count: int | None = None) -> VideoRead:
+    result = VideoRead.model_validate(video)
+    result.processing_job = ProcessingJobRead.model_validate(job) if job else None
+    result.object_count = object_count
+    return result
+
+
+@router.get("", response_model=list[VideoRead])
+async def list_videos(
+    limit: int = Query(50, ge=1, le=200),
+    service: VideoQueryService = Depends(get_query_service),
+) -> list[VideoRead]:
+    return [_read(v, job, n) for v, job, n in await service.list_videos(limit)]
+
+
+@router.get("/{video_id}/media", response_class=FileResponse)
+async def get_media(
+    video_id: uuid.UUID,
+    service: VideoQueryService = Depends(get_query_service),
+    container: AppContainer = Depends(get_container),
+):
+    """The original upload, for playback. Supports HTTP range requests so seeking works."""
+    video, _ = await service.get_video(video_id)
+    reference = await container.storage.get_download_reference(video.storage_key)
+    if reference.startswith(("http://", "https://")):
+        return RedirectResponse(reference)
+    return FileResponse(reference, media_type=video.content_type)
+
+
 @router.get("/{video_id}", response_model=VideoRead)
 async def get_video(
     video_id: uuid.UUID, service: VideoQueryService = Depends(get_query_service)
 ) -> VideoRead:
     video, job = await service.get_video(video_id)
-    result = VideoRead.model_validate(video)
-    result.processing_job = ProcessingJobRead.model_validate(job) if job else None
-    return result
+    return _read(video, job)
 
 
 @router.get("/{video_id}/observations", response_model=list[ObservationRead])

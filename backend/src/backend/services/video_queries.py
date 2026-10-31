@@ -19,6 +19,10 @@ class VideoQueryService:
         video = await self._require(video_id)
         return video, await self.jobs.get_latest_for_video(video_id)
 
+    async def list_videos(self, limit: int) -> list[tuple[Video, ProcessingJob | None, int]]:
+        rows = await self.videos.list_recent(limit)
+        return [(v, await self.jobs.get_latest_for_video(v.id), n) for v, n in rows]
+
     async def list_observations(
         self, video_id: uuid.UUID, limit: int, offset: int
     ) -> list[Observation]:

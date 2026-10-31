@@ -4,11 +4,12 @@ import pytest
 from sqlalchemy import func, select
 
 from backend.core.exceptions import SamProcessingError
+from backend.integrations.meta.sam_client import MockSamClient
 from backend.models import JobStatus, Observation, ProcessingJob, TrackedObject, Video, VideoStatus
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_processing import VideoProcessingService
 
-from .conftest import MP4_BYTES
+from .conftest import FIXTURE_DIR, MP4_BYTES
 
 
 class NoopDispatcher:
@@ -17,7 +18,7 @@ class NoopDispatcher:
 
 
 class FailingSam:
-    async def process_video(self, video_path, concepts=None):
+    async def process_video(self, video_path, concepts=None, progress=None):
         raise SamProcessingError("boom")
 
 
@@ -79,3 +80,41 @@ async def test_sam_failure_marks_video_and_job_failed(container):
     assert job.status == JobStatus.FAILED
     assert "boom" in job.error_message
     assert container.graph.calls == []
+
+
+async def test_failed_job_records_the_failed_stage(container):
+    from sqlalchemy import select
+
+    from backend.models import ProcessingJob
+    from backend.workers.video_worker import process_video_job
+
+    container.sam = FailingSam()
+    video_id, job_id = await _queued(container)
+    await process_video_job(container, video_id, job_id)
+    async with container.session_factory() as session:
+        job = (await session.execute(select(ProcessingJob))).scalar_one()
+    assert job.stage == "failed" and job.error_message
+
+
+async def test_sam_progress_is_recorded_as_stages_while_processing(container):
+    from sqlalchemy import select
+
+    from backend.models import ProcessingJob
+    from backend.workers.video_worker import process_video_job
+
+    seen = []
+
+    class ReportingSam:
+        async def process_video(self, video_path, concepts=None, progress=None):
+            await progress("discovering", "Looking")
+            await progress("tracking", "1/2 tracked: mug, pen")
+            async with container.session_factory() as other:  # a second connection sees it
+                seen.append((await other.execute(select(ProcessingJob))).scalar_one().stage)
+            return await MockSamClient(FIXTURE_DIR).process_video(video_path)
+
+    container.sam = ReportingSam()
+    video_id, job_id = await _queued(container)
+    await process_video_job(container, video_id, job_id)
+    assert seen == ["tracking"]
+    async with container.session_factory() as session:
+        assert (await session.execute(select(ProcessingJob))).scalar_one().stage == "completed"

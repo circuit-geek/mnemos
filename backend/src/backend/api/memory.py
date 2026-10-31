@@ -7,6 +7,7 @@ from backend.reasoning.models import Answer
 from backend.schemas.memory import (
     AskRequest,
     GraphSnapshot,
+    MemoryBundle,
     MemoryEvent,
     MemoryObject,
     MemoryObservation,
@@ -78,3 +79,11 @@ async def list_relationships(
 ) -> list[MemoryRelationship]:
     at_ms = round(at_seconds * 1000) if at_seconds is not None else None
     return await memory.relationships(video_id, at_ms, object_id)
+
+
+@router.get("/memory", response_model=MemoryBundle)
+async def full_memory(
+    video_id: uuid.UUID = Depends(_existing_video),
+    memory: MemoryQueryService = Depends(get_memory_service),
+) -> MemoryBundle:
+    return await memory.bundle(video_id)

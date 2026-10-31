@@ -10,7 +10,6 @@ import {
 } from "@xyflow/react";
 import { Maximize2, Network, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { useExplorer } from "@/hooks/ExplorerContext";
-import { graphLayout } from "@/mocks/objects";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -29,8 +28,15 @@ const NODE_W = 150;
 const NODE_H = 52;
 const FIT_PADDING = 0.18;
 
-function layoutPosition(id: string, index: number) {
-  return graphLayout[id] ?? { x: (index % 3) * 200, y: Math.floor(index / 3) * 140 };
+/**
+ * Fixed positions on an ellipse, by object order, so nodes never move while seeking and
+ * any number of objects stays readable.
+ */
+function layoutPosition(index: number, total: number) {
+  if (total <= 1) return { x: 0, y: 0 };
+  const angle = -Math.PI / 2 + (2 * Math.PI * index) / total;
+  const radius = Math.max(150, total * 48);
+  return { x: Math.cos(angle) * radius * 1.35, y: Math.sin(angle) * radius * 0.85 };
 }
 
 function GraphCanvas() {
@@ -45,7 +51,7 @@ function GraphCanvas() {
       graph.snapshot.nodes.map((n) => ({
         id: n.id,
         type: "object",
-        position: layoutPosition(n.id, memory.objects.findIndex((o) => o.id === n.id)),
+        position: layoutPosition(memory.objects.findIndex((o) => o.id === n.id), memory.objects.length),
         draggable: false,
         ariaLabel: `${n.label}${n.visible ? "" : " (not visible)"}`,
         data: {
@@ -92,7 +98,7 @@ function GraphCanvas() {
 
   const fitAll = useCallback(
     (duration = 0) => {
-      const ids = memory.objects.map((o, i) => layoutPosition(o.id, i));
+      const ids = memory.objects.map((_, i) => layoutPosition(i, memory.objects.length));
       if (ids.length === 0) return;
       const minX = Math.min(...ids.map((p) => p.x));
       const minY = Math.min(...ids.map((p) => p.y));

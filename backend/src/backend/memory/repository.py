@@ -206,6 +206,13 @@ class Neo4jMemoryRepository:
             return [_node(record, "o") for record in session.execute_read(
                 lambda tx: list(tx.run(query, video_id=video_id)))]
 
+    def get_video_observations(self, video_id: str) -> list[dict]:
+        query = """MATCH (:Video {video_id: $video_id})-[:CONTAINS]->(obs:Observation)
+                   RETURN obs ORDER BY obs.timestamp_ms, obs.frame_index, obs.object_id"""
+        with self.driver.session(database=self.database) as session:
+            return [_node(record, "obs") for record in session.execute_read(
+                lambda tx: list(tx.run(query, video_id=video_id)))]
+
     def get_object_history(self, video_id: str, object_id: str) -> list[dict]:
         query = """MATCH (:Video {video_id: $video_id})-[:HAS_OBJECT]->(o:Object {object_id: $object_id})
                    MATCH (o)-[:HAS_OBSERVATION]->(obs:Observation)

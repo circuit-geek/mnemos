@@ -6,7 +6,7 @@ export const EVENT_META: Record<
   { label: string; Icon: LucideIcon; dot: string; text: string }
 > = {
   object_appeared: { label: "Object appeared", Icon: Eye, dot: "bg-success", text: "text-success" },
-  object_disappeared: { label: "Object disappeared", Icon: EyeOff, dot: "bg-warning", text: "text-warning" },
+  object_disappeared: { label: "No longer detected", Icon: EyeOff, dot: "bg-warning", text: "text-warning" },
   object_moved: { label: "Object moved", Icon: Move, dot: "bg-accent", text: "text-accent" },
   relationship_changed: {
     label: "Relationship changed",

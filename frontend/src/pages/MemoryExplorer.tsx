@@ -9,6 +9,7 @@ import { Wordmark } from "@/components/common/Logo";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Badge } from "@/components/ui/badge";
+import { ProcessingProgress } from "@/components/common/ProcessingProgress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VisualPerceptionPanel } from "@/components/video/VisualPerceptionPanel";
@@ -17,6 +18,7 @@ import { TimelinePanel } from "@/components/timeline/TimelinePanel";
 import { EventList } from "@/components/timeline/EventList";
 import { AskSidebar } from "@/components/chat/AskSidebar";
 import { cn, formatTime } from "@/lib/utils";
+import { ApiError } from "@/lib/api";
 import type { VideoRecord } from "@/types";
 
 function Header({
@@ -36,13 +38,19 @@ function Header({
       {video && (
         <>
           <StatusBadge status={video.status} />
-          <span className="hidden items-center gap-1 text-xs tabular-nums text-muted sm:flex">
-            <Clock className="size-3.5" aria-hidden /> {formatTime(video.duration)}
-          </span>
-          {video.isDemo && (
-            <Badge tone="warning" className="hidden md:inline-flex">
-              Demo data
-            </Badge>
+          {video.status === "ready" && (
+            <span className="hidden items-center gap-1 text-xs tabular-nums text-muted sm:flex">
+              <Clock className="size-3.5" aria-hidden /> {formatTime(video.duration)}
+            </span>
+          )}
+          {video.trackedConcepts.length > 0 && (
+            <ul className="hidden items-center gap-1 md:flex" aria-label="Tracked objects">
+              {video.trackedConcepts.map((c) => (
+                <li key={c}>
+                  <Badge>{c}</Badge>
+                </li>
+              ))}
+            </ul>
           )}
         </>
       )}
@@ -54,6 +62,7 @@ function Header({
             <span className="sr-only sm:hidden">Back to Library</span>
           </Link>
         </Button>
+        {video?.status === "ready" && (
         <Button
           variant={sidebarOpen ? "secondary" : "outline"}
           size="sm"
@@ -65,8 +74,40 @@ function Header({
           <span className="hidden sm:inline">Ask MNEMOS</span>
           <span className="sr-only sm:hidden">Toggle Ask MNEMOS</span>
         </Button>
+        )}
       </div>
     </header>
+  );
+}
+
+/** Shown while the backend works: the original video plays beside the live pipeline stages. */
+function ProcessingView({ video }: { video: VideoRecord }) {
+  const job = video.job;
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+      <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-2">
+        <section aria-label="Uploaded video" className="flex flex-col gap-2">
+          <video
+            src={video.videoUrl}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            className="aspect-video w-full rounded-xl border border-line bg-black"
+          />
+          <p className="text-xs text-muted">
+            {video.status === "failed"
+              ? "This recording could not be analyzed."
+              : "Analysis is running on the server. This page opens the results as soon as they are ready."}
+          </p>
+        </section>
+        {job ? (
+          <ProcessingProgress job={job} title={video.title} skippedDiscovery={video.requestedConcepts.length > 0} />
+        ) : (
+          <EmptyState icon={<Loader2 className="size-5 animate-spin" />} title="Waiting for the worker…" />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -89,11 +130,11 @@ export default function MemoryExplorer() {
   const video = useQuery({
     queryKey: ["video", videoId],
     queryFn: () => videoService.getVideo(videoId),
-    refetchInterval: (q) => (q.state.data?.status === "processing" ? 300 : false),
+    refetchInterval: (q) => (q.state.data?.status === "processing" ? 1000 : false),
   });
   const memory = useQuery({
     queryKey: ["memory", videoId],
-    queryFn: () => memoryService.getMemory(videoId),
+    queryFn: () => memoryService.getMemory(video.data!),
     enabled: video.data?.status === "ready",
     staleTime: Infinity,
   });
@@ -103,8 +144,8 @@ export default function MemoryExplorer() {
     body = (
       <EmptyState
         icon={<AlertCircle className="size-5" />}
-        title="Recording not found"
-        description="It may have been removed, or an upload from an earlier session no longer exists."
+        title={video.error instanceof ApiError && video.error.status !== 404 ? "Couldn't load recording" : "Recording not found"}
+        description={video.error instanceof Error ? video.error.message : undefined}
         action={
           <Button asChild variant="primary" size="sm">
             <Link to="/">Back to Library</Link>
@@ -114,27 +155,14 @@ export default function MemoryExplorer() {
     );
   } else if (video.isPending) {
     body = <LoadingWorkspace />;
-  } else if (video.data.status === "processing") {
-    body = (
-      <EmptyState
-        icon={<Loader2 className="size-5 animate-spin" />}
-        title="Still processing"
-        description="This recording is being processed (simulated). The explorer opens when it's ready."
-      />
-    );
-  } else if (video.data.status === "failed") {
-    body = (
-      <EmptyState
-        icon={<AlertCircle className="size-5" />}
-        title="Processing failed"
-        description="This recording couldn't be processed."
-      />
-    );
+  } else if (video.data.status !== "ready") {
+    body = <ProcessingView video={video.data} />;
   } else if (memory.isError) {
     body = (
       <EmptyState
         icon={<AlertCircle className="size-5" />}
         title="Couldn't load memory"
+        description={memory.error.message}
         action={<Button onClick={() => void memory.refetch()}>Try again</Button>}
       />
     );

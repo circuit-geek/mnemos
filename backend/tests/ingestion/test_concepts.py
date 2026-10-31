@@ -25,9 +25,9 @@ class RecordingSam(MockSamClient):
         super().__init__(*args)
         self.calls = []
 
-    async def process_video(self, video_path, concepts=None):
+    async def process_video(self, video_path, concepts=None, progress=None):
         self.calls.append(concepts)
-        result = await super().process_video(video_path, concepts)
+        result = await super().process_video(video_path, concepts, progress)
         return result.model_copy(update={"concepts": concepts or ["discovered"]})
 
 

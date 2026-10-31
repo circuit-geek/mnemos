@@ -18,6 +18,8 @@ class ProcessingJobRead(BaseModel):
 
     id: uuid.UUID
     status: JobStatus
+    stage: str | None = None
+    stage_detail: str | None = None
     error_message: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -32,6 +34,9 @@ class VideoRead(BaseModel):
     content_type: str
     size_bytes: int
     duration_seconds: float | None = None
+    width: int | None = None
+    height: int | None = None
+    object_count: int | None = None
     status: VideoStatus
     requested_concepts: list[str] | None = None
     tracked_concepts: list[str] | None = None

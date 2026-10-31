@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import uuid
+from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +17,18 @@ from backend.repositories.videos import VideoRepository
 from backend.scene.scene_service import SceneAnalyzer
 
 logger = logging.getLogger(__name__)
+
+
+class Stage(StrEnum):
+    """Pipeline stages in order; each is set only when the work actually begins."""
+
+    QUEUED = "queued"
+    DISCOVERING = "discovering"
+    TRACKING = "tracking"
+    BUILDING_MEMORY = "building_memory"
+    ANALYZING_SCENE = "analyzing_scene"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class VideoProcessingService:
@@ -35,6 +49,7 @@ class VideoProcessingService:
         self.jobs = ProcessingJobRepository(session)
         self.tracked_objects = TrackedObjectRepository(session)
         self.observations = ObservationRepository(session)
+        self._commit_lock = asyncio.Lock()
 
     async def process(self, video_id: uuid.UUID, job_id: uuid.UUID) -> None:
         ids = f"video_id={video_id} job_id={job_id}"
@@ -46,11 +61,13 @@ class VideoProcessingService:
         try:
             await self.videos.set_status(video, VideoStatus.PROCESSING)
             await self.jobs.mark_running(job)
-            await self.session.commit()
+            await self._stage(job, Stage.TRACKING)
             logger.info("Processing started %s", ids)
 
             async with self.storage.open_local_copy(video.storage_key) as video_path:
-                result = await self.sam.process_video(video_path, video.requested_concepts)
+                result = await self.sam.process_video(
+                    video_path, video.requested_concepts, lambda s, d: self._stage(job, s, d)
+                )
             logger.info(
                 "SAM processing finished %s objects=%d observations=%d",
                 ids,
@@ -58,6 +75,7 @@ class VideoProcessingService:
                 len(result.observations),
             )
 
+            await self._stage(job, Stage.BUILDING_MEMORY, "Saving observations and events")
             await self._persist(video, result)
             logger.info("Observations persisted %s", ids)
 
@@ -66,9 +84,10 @@ class VideoProcessingService:
             )
             logger.info("Graph update finished %s", ids)
 
-            await self._analyze_scene(video, result, ids)
+            await self._analyze_scene(video, job, result, ids)
 
             await self.videos.set_status(video, VideoStatus.COMPLETED)
+            job.stage, job.stage_detail = Stage.COMPLETED, None
             await self.jobs.mark_completed(job)
             await self.session.commit()
             logger.info("Processing completed %s", ids)
@@ -76,12 +95,21 @@ class VideoProcessingService:
             logger.exception("Processing failed %s", ids)
             await self._mark_failed(video_id, job_id, exc)
 
-    async def _analyze_scene(self, video: Video, result: VideoProcessingResult, ids: str) -> None:
+    async def _stage(self, job, stage: str, detail: str | None = None) -> None:
+        """Record and commit the stage reached. Callbacks may overlap, so serialise the session."""
+        async with self._commit_lock:
+            job.stage, job.stage_detail = str(stage), detail[:255] if detail else None
+            await self.session.commit()
+
+    async def _analyze_scene(
+        self, video: Video, job, result: VideoProcessingResult, ids: str
+    ) -> None:
         """Spatial relations enrich the temporal memory; if they fail the video still completes
         with its temporal memory, and the failure is logged."""
         if self.scene is None:
             return
         try:
+            await self._stage(job, Stage.ANALYZING_SCENE, "Verifying spatial relationships")
             batch = build_memory_batch(video.id, video.original_filename, video.created_at, result)
             async with self.storage.open_local_copy(video.storage_key) as video_path:
                 relationships = await self.scene.analyze(
@@ -124,6 +152,7 @@ class VideoProcessingService:
             ]
         )
         video.tracked_concepts = result.concepts or None
+        video.width, video.height = result.width, result.height
         if result.duration_seconds is not None:
             video.duration_seconds = result.duration_seconds
 
@@ -134,5 +163,6 @@ class VideoProcessingService:
         if video is not None:
             await self.videos.set_status(video, VideoStatus.FAILED)
         if job is not None:
+            job.stage, job.stage_detail = Stage.FAILED, None
             await self.jobs.mark_failed(job, f"{type(exc).__name__}: {exc}"[:1000])
         await self.session.commit()
