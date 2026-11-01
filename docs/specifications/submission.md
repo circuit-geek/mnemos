@@ -13,7 +13,7 @@ required (`docs/decisions/0001-local-only-scope.md`).
       `backend/data/`, `backend/test_data/`, `frontend/node_modules`, `.idea/`.
 - [ ] A fresh clone runs by following `README.md` only (compose, migrations, backend, frontend).
 - [ ] `backend/.env.example` works against `docker-compose.yml`; the README says a Meta API key is needed.
-- [ ] Demo clips are in the tracked `demo/` folder (done: about 13 MB); `git add demo/`.
+- [ ] No video files are committed; demo clips stay local (`backend/test_data/`, git-ignored).
 - [ ] `cd backend && uv run pytest` and `cd frontend && npm run build` pass.
 - [ ] Demo video uploaded to YouTube (3 minutes at most) and the link works logged out.
 

@@ -254,7 +254,7 @@ uv run python scripts/ask_memory.py --video-id <id> "When did the mug disappear?
 
 ### Demo clips
 
-Three short recordings are in [`demo/`](demo) with the questions worth asking about each.
+Videos are not stored in the repository. Record your own short clip (static or handheld, a few objects on a desk) and upload it; [`docs/specifications/demo-videos.md`](docs/specifications/demo-videos.md) suggests scenes and questions that work well.
 
 ### Tests
 
