@@ -1,12 +1,19 @@
 import { Clock } from "lucide-react";
 import { FOCUS_WINDOW_S } from "@/hooks/useMemoryGraph";
+import { getObservationAt } from "@/services/memoryService";
 import { useExplorer } from "@/hooks/ExplorerContext";
 import { cn, formatTime } from "@/lib/utils";
 import type { EvidenceReference } from "@/types";
 
 /** Clicking seeks the video, updates the graph, selects the object and highlights this item. */
 export function EvidenceChip({ evidence }: { evidence: EvidenceReference }) {
-  const { focusEvidence, selection, timeline } = useExplorer();
+  const { focusEvidence, selection, timeline, memory } = useExplorer();
+  // Where the cited objects were in this frame (only if they were actually detected then).
+  const boxes = evidence.objectIds.flatMap((id) => {
+    const obs = getObservationAt(memory.observations, id, evidence.timestamp);
+    const label = memory.objects.find((o) => o.id === id)?.label ?? "";
+    return obs?.boundingBox ? [{ id, label, box: obs.boundingBox }] : [];
+  });
   const active =
     selection.evidenceId === evidence.id &&
     Math.abs(timeline.currentTime - evidence.timestamp) <= FOCUS_WINDOW_S;
@@ -21,12 +28,17 @@ export function EvidenceChip({ evidence }: { evidence: EvidenceReference }) {
       )}
     >
       {evidence.frameUrl && (
-        <img
-          src={evidence.frameUrl}
-          alt=""
-          loading="lazy"
-          className="h-10 w-[72px] shrink-0 rounded-md border border-line bg-elevated object-cover"
-        />
+        <span className="relative block aspect-video w-28 shrink-0 overflow-hidden rounded-md border border-line bg-elevated">
+          <img src={evidence.frameUrl} alt="" loading="lazy" className="size-full object-cover" />
+          {boxes.map((b) => (
+            <span
+              key={b.id}
+              title={b.label}
+              className="absolute rounded-[2px] border-2 border-accent bg-accent/15"
+              style={{ left: `${b.box.x * 100}%`, top: `${b.box.y * 100}%`, width: `${b.box.w * 100}%`, height: `${b.box.h * 100}%` }}
+            />
+          ))}
+        </span>
       )}
       <span
         className={cn(

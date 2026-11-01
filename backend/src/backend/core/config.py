@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     sam_concept: str = "object"
     # What to track is per video: the upload's `concepts`, else discovered by Muse Spark.
     sam_discovery_frames: int = 6
+    # One SAM run (a single concept) must finish within this; a hung call fails the job.
+    sam_timeout_seconds: int = 600
+    muse_timeout_seconds: int = 90
     sam_max_concepts: int = 5
     sam_script_path: Path = BACKEND_ROOT / "scripts" / "test_sam_video.py"
     meta_api_key: str = ""

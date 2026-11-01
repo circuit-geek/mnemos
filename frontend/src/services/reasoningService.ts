@@ -48,6 +48,10 @@ export function mapAnswer(res: ApiAnswer, memory: MemoryData): AskResponse {
     } else if (e.kind === "event" && graphId) {
       const event = memory.events.find((x) => x.id === graphId);
       if (event) Object.assign(ref, { objectIds: event.objectIds, eventId: event.id, relationshipIds: event.relationshipIds });
+    } else if (e.kind === "comparison" && graphId) {
+      const rel = memory.relationships.find((r) => r.id === graphId);
+      if (rel) Object.assign(ref, { objectIds: [rel.sourceId, rel.targetId], relationshipIds: [rel.id] });
+      else ref.objectIds = [graphId];
     } else if (e.kind === "relationship" && graphId) {
       const rel = memory.relationships.find((r) => r.id === graphId);
       if (rel) Object.assign(ref, { objectIds: [rel.sourceId, rel.targetId], relationshipIds: [rel.id] });
@@ -71,7 +75,7 @@ export const reasoningService = {
   /** Suggestions come from what was actually found in this video. */
   suggestedQuestions(objects: TrackedObject[]): string[] {
     const labels = [...new Set(objects.map((o) => o.label))];
-    const questions = ["What changed in this video?"];
+    const questions = ["What changed in this video?", "How is the scene different at the end compared to the start?"];
     if (labels[0]) questions.push(`Where was the ${labels[0]} last seen?`);
     if (labels[1]) questions.push(`What is next to the ${labels[1]}?`);
     else if (labels[0]) questions.push(`What is near the ${labels[0]}?`);

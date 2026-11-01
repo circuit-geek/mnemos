@@ -12,7 +12,8 @@ const posStyle = (frac: number) => ({
 });
 
 export function TimelinePanel() {
-  const { timeline, memory, graph, selection, selectEvent, stepEvent, scrubTo, video } = useExplorer();
+  const { timeline, memory, graph, selection, selectEvent, stepEvent, scrubTo, video, answerMarkers, focusEvidence } =
+    useExplorer();
   const { duration, currentTime } = timeline;
   const frac = (t: number) => (duration > 0 ? t / duration : 0);
 
@@ -97,6 +98,25 @@ export function TimelinePanel() {
             </div>
           ))}
         </div>
+
+        {answerMarkers.length > 0 && (
+          <div className="relative mt-1 h-5 rounded border border-dashed border-accent/40" aria-label="Evidence cited by the latest answer">
+            <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-medium uppercase tracking-wider text-accent/80">
+              Answer evidence
+            </span>
+            {answerMarkers.map((ev) => (
+              <Tooltip key={ev.id} label={`${formatTime(ev.timestamp)} · ${ev.caption}`}>
+                <button
+                  type="button"
+                  onClick={() => focusEvidence(ev)}
+                  aria-label={`Evidence at ${formatTime(ev.timestamp)}: ${ev.caption}`}
+                  className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] bg-accent transition-transform hover:scale-125"
+                  style={posStyle(frac(ev.timestamp))}
+                />
+              </Tooltip>
+            ))}
+          </div>
+        )}
 
         {/* Scrubber */}
         <div className="relative mt-2 h-4">

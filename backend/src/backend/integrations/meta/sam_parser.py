@@ -37,6 +37,7 @@ def parse_sam_artifacts(artifact_dir: Path) -> VideoProcessingResult:
             frame_count=metadata.get("frame_count"),
             width=metadata.get("width"),
             height=metadata.get("height"),
+            frame_timestamps_seconds=[t / 1000 for t in batch.frame_timestamps_ms],
             objects=[
                 TrackedObjectResult(
                     tracking_id=o.tracking_id,

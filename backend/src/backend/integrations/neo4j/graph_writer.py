@@ -26,6 +26,8 @@ class GraphWriter(Protocol):
         self, video_id: uuid.UUID, relationships: list[Relationship]
     ) -> None: ...
 
+    async def delete_video_graph(self, video_id: uuid.UUID) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -36,6 +38,9 @@ class NullGraphWriter:
         logger.info("Neo4j disabled; skipping graph update video_id=%s", video_id)
 
     async def write_relationships(self, video_id, relationships) -> None:
+        return None
+
+    async def delete_video_graph(self, video_id) -> None:
         return None
 
     async def close(self) -> None:
@@ -71,6 +76,9 @@ class Neo4jGraphWriter:
         await asyncio.to_thread(
             self.repository.replace_relationships, str(video_id), relationships
         )
+
+    async def delete_video_graph(self, video_id) -> None:
+        await asyncio.to_thread(self.repository.delete_video, str(video_id))
 
     async def close(self) -> None:
         await asyncio.to_thread(self.repository.close)
@@ -117,5 +125,10 @@ def build_memory_batch(
             for o in result.objects
         ],
         observations=observations,
-        frame_timestamps_ms=sorted({o.timestamp_ms for o in observations}),
+        # Observations carry real frame numbers, so they must index the real frame timestamps;
+        # frames with no detection at all would otherwise shift every later index.
+        frame_timestamps_ms=(
+            [round(t * 1000) for t in result.frame_timestamps_seconds]
+            or sorted({o.timestamp_ms for o in observations})
+        ),
     )

@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -42,7 +42,7 @@ class ObservationTransformer:
             duration_ms = (round(float(metadata["duration_seconds"]) * 1000)
                            if metadata.get("duration_seconds") is not None else None)
             filename = Path(metadata["source_video"]).name
-            created = datetime.strptime(metadata["created_at_utc"], "%Y%m%d_%H%M%S_%f").replace(tzinfo=timezone.utc)
+            created = datetime.strptime(metadata["created_at_utc"], "%Y%m%d_%H%M%S_%f").replace(tzinfo=UTC)
         except (KeyError, ValueError, TypeError) as exc:
             raise ValueError("Invalid video metadata") from exc
         if width <= 0 or height <= 0 or frame_count <= 0 or len(timestamps) != frame_count:

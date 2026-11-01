@@ -8,11 +8,12 @@ required (`docs/decisions/0001-local-only-scope.md`).
 ## Checklist
 
 - [ ] Repository is public; no secrets in the tree or history (`backend/.env`, API keys).
+- [ ] `.idea/` is tracked: run `git rm -r --cached .idea` (the new root `.gitignore` then keeps it out).
 - [ ] Large and local-only folders stay out: `backend/outputs/` (SAM experiment output, many GB),
       `backend/data/`, `backend/test_data/`, `frontend/node_modules`, `.idea/`.
 - [ ] A fresh clone runs by following `README.md` only (compose, migrations, backend, frontend).
 - [ ] `backend/.env.example` works against `docker-compose.yml`; the README says a Meta API key is needed.
-- [ ] Demo clips a reviewer can use are committed somewhere small and tracked (for example `demo/`).
+- [ ] Demo clips are in the tracked `demo/` folder (done: about 13 MB); `git add demo/`.
 - [ ] `cd backend && uv run pytest` and `cd frontend && npm run build` pass.
 - [ ] Demo video uploaded to YouTube (3 minutes at most) and the link works logged out.
 
@@ -29,7 +30,7 @@ Processing a clip takes 1-2 minutes, so pre-process the clips and cut or speed u
 | 1:15 | Scrub 0:00 to 0:18 | Notebook appears at 8 s, phone at 15 s; relations appear and end. Seeking back restores earlier states. |
 | 1:45 | Ask "What is next to the notebook?" | Muse Spark answers only from stored memory; evidence cites relations and frames. |
 | 2:05 | Click evidence | The video, graph and timeline jump to that moment. |
-| 2:20 | Ask "Which objects were on the desk before the notebook appeared?" and an unanswerable question | Time-aware retrieval; it says when evidence is missing. |
+| 2:20 | Ask "How is the scene different at the end compared to the start?", then an unanswerable question | Comparing two moments; it says when evidence is missing. |
 | 2:40 | `scenario_1` (mug leaves and returns) briefly | Gaps are "no longer detected", not proof the object left. |
 | 2:50 | Architecture slide | SAM 3.1 tracks; Muse Spark discovers, verifies relations, interprets and answers; Neo4j stores the graph. |
 

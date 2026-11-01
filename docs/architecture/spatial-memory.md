@@ -25,6 +25,12 @@ Muse Spark names the objects in the video (concept discovery)
 - **Verification, not geometry.** Boxes are hints; Muse decides from the image. Output is validated: unknown
   or identical object IDs, malformed entries and confidence below `SCENE_MIN_CONFIDENCE` are dropped.
   `CONTAINS` is stored once as the inverse `INSIDE`. `NEXT_TO` and `NEAR` are symmetric (one edge per pair).
+- **Adaptive sampling.** On top of the regular grid, a sample is taken `settle_ms` (300 ms) after each
+  object first appears and after each reappearance following a gap of over a second (at most 12
+  extra samples), so a relation's start is not placed up to a whole interval after the object arrived.
+- **Proximity is one interval.** The model flips between `NEAR` and `NEXT_TO` for the same pair from
+  frame to frame. They share one interval, labelled by whichever was reported more often (ties go to
+  `NEXT_TO`), so the graph does not flicker. `ON` and `INSIDE` stay separate.
 - **Intervals.** A relation opens at its first detection and closes at the first verified sample where both
   objects are visible and it is no longer reported. A visibility gap or a failed model call never closes it.
   `valid_from_ms <= t < valid_to_ms`; `valid_to_ms = null` means it was still holding at `last_verified_ms`.
@@ -46,7 +52,7 @@ NEXT_TO". Surfaces such as a desk are not tracked objects.
 ## Known limits
 
 - Identity can split across an occlusion or a long absence (the same mug may become two tracks).
-- `NEAR` and `NEXT_TO` can flip between samples, fragmenting intervals; they are distinct edges.
+- Within one proximity interval the `NEAR`/`NEXT_TO` label is the majority vote, so a real change from near to next to is not shown as two relations.
 - One Muse call per sample: a 20 s clip is about 10 calls. Total processing is dominated by one SAM run per concept.
 - Discovery is a model call, so it is not deterministic: it can add a concept that is not really there (that
   costs one empty SAM run) or miss a small object. Pass `concepts` on upload when it matters.

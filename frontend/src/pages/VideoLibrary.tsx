@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { VideoCard } from "@/components/common/VideoCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { videoService } from "@/services/videoService";
+import type { VideoRecord } from "@/types";
 
 export default function VideoLibrary() {
   const queryClient = useQueryClient();
@@ -31,6 +32,20 @@ export default function VideoLibrary() {
     },
     onError: (e: Error) => setUploadError(e.message),
   });
+
+  const remove = useMutation({
+    mutationFn: (video: VideoRecord) => videoService.deleteVideo(video.id),
+    onSuccess: () => {
+      setUploadError(null);
+      void queryClient.invalidateQueries({ queryKey: ["videos"] });
+    },
+    onError: (e: Error) => setUploadError(e.message),
+  });
+  const confirmDelete = (video: VideoRecord) => {
+    if (window.confirm(`Delete "${video.title}" and everything MNEMOS remembered about it?`)) {
+      remove.mutate(video);
+    }
+  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -113,7 +128,7 @@ export default function VideoLibrary() {
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {videos.data.map((v) => (
-                <VideoCard key={v.id} video={v} />
+                <VideoCard key={v.id} video={v} onDelete={confirmDelete} deleting={remove.isPending} />
               ))}
             </div>
           )}

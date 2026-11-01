@@ -59,11 +59,13 @@ class ScriptSamClient:
         discoverer: ConceptDiscoverer,
         fallback_concept: str = "object",
         concurrency: int = 3,
+        timeout_seconds: float = 600,
     ) -> None:
         self.script_path = script_path
         self.api_key = api_key
         self.discoverer = discoverer
         self.fallback_concept = fallback_concept
+        self.timeout_seconds = timeout_seconds
         self._slots = asyncio.Semaphore(concurrency)
 
     async def _concepts_for(
@@ -137,7 +139,14 @@ class ScriptSamClient:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await process.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), self.timeout_seconds)
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            raise SamProcessingError(
+                f"SAM timed out after {self.timeout_seconds:.0f}s for {concept!r}"
+            ) from None
         if process.returncode != 0:
             raise SamProcessingError(f"SAM script failed: {stderr.decode().strip()[-500:]}")
         output_dir = self._output_dir(stdout.decode())
@@ -166,7 +175,9 @@ def merge_results(results: list[tuple[str, VideoProcessingResult]]) -> VideoProc
     first = results[0][1]
     return VideoProcessingResult(
         duration_seconds=first.duration_seconds, frame_count=first.frame_count,
-        width=first.width, height=first.height, objects=objects, observations=observations,
+        width=first.width, height=first.height,
+        frame_timestamps_seconds=first.frame_timestamps_seconds,
+        objects=objects, observations=observations,
     )
 
 
@@ -176,7 +187,7 @@ def create_sam_client(settings) -> SamClient:
     if not settings.meta_api_key:
         raise RuntimeError("SAM_BACKEND=script requires META_API_KEY")
     discoverer = ConceptDiscoverer(
-        MuseClient(settings.meta_api_key, settings.muse_model),
+        MuseClient(settings.meta_api_key, settings.muse_model, timeout=settings.muse_timeout_seconds),
         frames=settings.sam_discovery_frames,
         max_concepts=settings.sam_max_concepts,
     )
@@ -185,4 +196,5 @@ def create_sam_client(settings) -> SamClient:
         settings.meta_api_key,
         discoverer=discoverer,
         fallback_concept=settings.sam_concept,
+        timeout_seconds=settings.sam_timeout_seconds,
     )

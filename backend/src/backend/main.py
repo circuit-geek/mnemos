@@ -15,11 +15,14 @@ from backend.core.exceptions import (
     InvalidVideoError,
     MemoryUnavailableError,
     MnemosError,
+    StorageObjectNotFoundError,
     UnsupportedMediaTypeError,
+    VideoBusyError,
     VideoNotFoundError,
     VideoTooLargeError,
 )
 from backend.reasoning.models import ReasoningError
+from backend.services.recovery import fail_interrupted_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,8 @@ _STATUS_BY_ERROR: list[tuple[type[MnemosError], int]] = [
     (VideoTooLargeError, 413),
     (InvalidVideoError, 400),
     (VideoNotFoundError, 404),
+    (StorageObjectNotFoundError, 404),
+    (VideoBusyError, 409),
     (FrameNotFoundError, 404),
     (MemoryUnavailableError, 503),
 ]
@@ -53,6 +58,7 @@ def create_app(container: AppContainer | None = None) -> FastAPI:
             settings = get_settings()
             logging.basicConfig(level=settings.log_level)
             app.state.container = await build_container(settings)
+            await fail_interrupted_jobs(app.state.container.session_factory)
         try:
             yield
         finally:

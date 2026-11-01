@@ -1,5 +1,6 @@
 import uuid
-import uuid
+
+from backend.models import Video
 
 import pytest
 
@@ -199,3 +200,14 @@ async def test_memory_bundle_has_full_history_and_derived_relationship_events(
     assert started["description"] == "mug NEXT_TO mug began"
     assert [e["start_time_ms"] for e in bundle["events"]] == sorted(
         e["start_time_ms"] for e in bundle["events"])
+
+
+async def test_frame_at_the_very_end_of_the_video_is_still_returned(client, container, tmp_path):
+    data = _real_clip(tmp_path / "end.mp4")  # 2 s at 10 fps: the last frame starts at 1.9 s
+    vid = (await client.post("/api/v1/videos", files={"file": ("a.mp4", data, "video/mp4")})).json()["video_id"]
+    async with container.session_factory() as session:  # the mock SAM wrote the fixture's duration
+        (await session.get(Video, uuid.UUID(vid))).duration_seconds = 2.0
+        await session.commit()
+    for ms in (1900, 1950, 2000):
+        frame = await client.get(f"/api/v1/videos/{vid}/frames/{ms}")
+        assert frame.status_code == 200 and frame.content[:2] == b"\xff\xd8", ms

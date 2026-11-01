@@ -1,0 +1,8 @@
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Secrets and logs (each app also has its own .gitignore)
+.env
+*.log

@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.integrations.meta.identity import link_split_tracks
 from backend.integrations.meta.sam_client import SamClient
 from backend.integrations.meta.sam_models import VideoProcessingResult
 from backend.integrations.neo4j.graph_writer import GraphWriter, build_memory_batch
@@ -68,6 +69,9 @@ class VideoProcessingService:
                 result = await self.sam.process_video(
                     video_path, video.requested_concepts, lambda s, d: self._stage(job, s, d)
                 )
+            result = link_split_tracks(result)
+            if result.linked_tracks:
+                logger.info("Linked split tracks %s %s", ids, result.linked_tracks)
             logger.info(
                 "SAM processing finished %s objects=%d observations=%d",
                 ids,
@@ -131,7 +135,11 @@ class VideoProcessingService:
                 label=o.label,
                 first_seen_at=o.first_seen_seconds,
                 last_seen_at=o.last_seen_seconds,
-                attributes={},
+                attributes=(
+                    {"linked_tracking_ids": result.linked_tracks[o.tracking_id]}
+                    if o.tracking_id in result.linked_tracks
+                    else {}
+                ),
             )
             for o in result.objects
         }

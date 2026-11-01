@@ -78,7 +78,7 @@ async def test_status_is_queued_before_processing(client, container):
 
     async with container.session_factory() as session:
         service = VideoIngestionService(session, container.storage, NoopDispatcher(), 10_000)
-        video, job = await service.ingest(io.BytesIO(MP4_BYTES), "x.mp4", "video/mp4")
+        video, job, _ = await service.ingest(io.BytesIO(MP4_BYTES), "x.mp4", "video/mp4")
 
     detail = (await client.get(f"/api/v1/videos/{video.id}")).json()
     assert detail["status"] == VideoStatus.QUEUED

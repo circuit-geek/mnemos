@@ -7,12 +7,13 @@ Three clips exist (`backend/test_data/scenario_1..3.mp4`, 854x480, about 20 s, l
 
 | Clip | What happens | Verified result |
 |---|---|---|
-| `scenario_1` | Mug and laptop; mug leaves, returns later | Mug `NEXT_TO` laptop 0-10 s; mug no longer detected from 9.7 s; it returns at 15.2 s as a new track (identity splits); laptop `NEAR` mug from 16 s |
-| `scenario_2` | Mug and pen; notebook appears, then phone | Notebook appears at 8.0 s, phone at 15.6 s; `NEAR`/`NEXT_TO` relations open and close as objects arrive |
-| `scenario_3` | Pen beside notebook; a mug is placed on the notebook | Pen `NEAR` then `NEXT_TO` notebook; mug appears at 18.4 s, `NEAR` then `ON` the notebook from 20 s (checked against the frame) |
+| `scenario_1` | Mug and laptop; mug leaves, returns later | One mug (identity linked across the gap, ADR 0004) tracked 0-21 s with a "no longer detected" interval from 9.7 to 15.2 s; mug `NEXT_TO` laptop 0-10 s, then `NEAR` from 16 s; 3 movement events |
+| `scenario_2` | Mug and pen; notebook appears, then phone | Notebook appears at 8.0 s, phone at 15.6 s; 5 relations that open and close as objects arrive, no flicker; 6 movement events |
+| `scenario_3` | Pen beside notebook; a mug is placed on the notebook | Pen `NEXT_TO` notebook from 8 s; mug appears at 18.4 s, `NEAR` then `ON` the notebook from 20 s (checked against the frame); 5 movement events |
+
+Copies are tracked in `demo/`. Real answers for them are recorded in `backend/fixtures/scenarios` and replayed by `backend/tests/test_scenarios.py`.
 
 Still to shoot: a container clip (`INSIDE`) and, optionally, an occlusion clip (clips 3 and 5 below).
-Copy the clips you want reviewers to use into a tracked folder (see `submission.md`).
 
 The plan below is the original shoot script.
 

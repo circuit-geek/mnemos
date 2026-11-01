@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from backend.api.dependencies import (
     get_container,
+    get_deletion_service,
     get_frame_service,
     get_ingestion_service,
     get_query_service,
@@ -18,6 +19,7 @@ from backend.schemas.videos import (
     VideoRead,
 )
 from backend.services.frames import FrameService
+from backend.services.video_deletion import VideoDeletionService
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_queries import VideoQueryService
 
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=VideoAcceptedResponse)
 async def upload_video(
+    response: Response,
     file: UploadFile = File(...),
     concepts: str | None = Form(
         None,
@@ -34,10 +37,14 @@ async def upload_video(
     ),
     service: VideoIngestionService = Depends(get_ingestion_service),
 ) -> VideoAcceptedResponse:
-    video, job = await service.ingest(
+    video, job, reused = await service.ingest(
         file.file, file.filename, file.content_type, parse_concepts(concepts)
     )
-    return VideoAcceptedResponse(video_id=video.id, job_id=job.id, status=video.status)
+    if reused:
+        response.status_code = status.HTTP_200_OK
+    return VideoAcceptedResponse(
+        video_id=video.id, job_id=job.id, status=video.status, reused=reused
+    )
 
 
 def _read(video, job, object_count: int | None = None) -> VideoRead:
@@ -95,3 +102,12 @@ async def get_frame(
 ) -> Response:
     jpeg = await service.frame_jpeg(video_id, timestamp_ms)
     return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+@router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_video(
+    video_id: uuid.UUID, service: VideoDeletionService = Depends(get_deletion_service)
+) -> Response:
+    """Delete a finished or failed recording and everything derived from it (409 while processing)."""
+    await service.delete(video_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

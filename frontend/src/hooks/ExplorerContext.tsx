@@ -24,6 +24,9 @@ interface ExplorerContextValue {
   /** Manual scrubbing: keeps object selection, lets event highlights lapse. */
   scrubTo: (t: number) => void;
   stepEvent: (direction: -1 | 1) => void;
+  /** Evidence cited by the latest answer; shown as markers on the timeline. */
+  answerMarkers: EvidenceReference[];
+  setAnswerMarkers: (evidence: EvidenceReference[]) => void;
 }
 
 const ExplorerContext = createContext<ExplorerContextValue | null>(null);
@@ -43,6 +46,7 @@ export function ExplorerProvider({
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   // Evidence from Ask answers is not part of the stored memory; keep it so a click can highlight it.
   const [answerEvidence, setAnswerEvidence] = useState<EvidenceReference[]>([]);
+  const [answerMarkers, setAnswerMarkers] = useState<EvidenceReference[]>([]);
   const focusMemory = useMemo(
     () =>
       answerEvidence.length === 0
@@ -122,8 +126,10 @@ export function ExplorerProvider({
       selectObservation,
       scrubTo,
       stepEvent,
+      answerMarkers,
+      setAnswerMarkers,
     }),
-    [video, memory, timeline, graph, selection, selectObject, selectEvent, focusEvidence, selectObservation, scrubTo, stepEvent],
+    [video, memory, timeline, graph, selection, selectObject, selectEvent, focusEvidence, selectObservation, scrubTo, stepEvent, answerMarkers],
   );
 
   return <ExplorerContext.Provider value={value}>{children}</ExplorerContext.Provider>;

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import uuid
@@ -54,9 +55,19 @@ class VideoIngestionService:
         original_filename: str | None,
         content_type: str | None,
         concepts: list[str] | None = None,
-    ) -> tuple[Video, ProcessingJob]:
+    ) -> tuple[Video, ProcessingJob, bool]:
+        """Returns (video, job, reused); `reused` means an identical upload already exists."""
         content_type = (content_type or "").split(";")[0].strip().lower()
         size = self._validate(data, content_type)
+
+        data.seek(0)
+        content_hash = hashlib.file_digest(data, "sha256").hexdigest()
+        for existing in await self.videos.find_reusable(content_hash):
+            if (existing.requested_concepts or None) == (concepts or None):
+                job = await self.jobs.get_latest_for_video(existing.id)
+                if job is not None:
+                    logger.info("Upload matches video_id=%s; reusing it", existing.id)
+                    return existing, job, True
 
         video_id = uuid.uuid4()
         safe_name = (
@@ -78,6 +89,7 @@ class VideoIngestionService:
                     original_filename=safe_name[:255],
                     content_type=content_type,
                     storage_key=storage_key,
+                    content_hash=content_hash,
                     size_bytes=size,
                     requested_concepts=concepts,
                     status=VideoStatus.UPLOADED,
@@ -108,7 +120,7 @@ class VideoIngestionService:
             await self.session.commit()
             raise
         logger.info("Processing job queued video_id=%s job_id=%s", video.id, job.id)
-        return video, job
+        return video, job, False
 
     def _validate(self, data: BinaryIO, content_type: str) -> int:
         if content_type not in ALLOWED_CONTENT_TYPES:

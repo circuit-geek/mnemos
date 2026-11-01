@@ -38,13 +38,17 @@ remains absent. `Video.created_at` comes from the experiment metadata.
 ## Events
 
 - `APPEARED`: first detected observation for a track.
-- `MOVED`: center displacement reaches the configured pixel threshold, measured
-  from the last significant position. Movement is not inferred across a frame gap.
+- `MOVED`: center displacement reaches the configured pixel threshold (50 px), measured
+  from the last significant position. Motion is dated from its onset (the first observation
+  15 px from the anchor), and movements that follow each other within one second are merged into
+  one continuous movement, so an object in constant motion yields one event, not dozens. The
+  description reports the distance travelled along the path. Movement is not inferred across a
+  frame gap. It is movement in the video frame: a handheld camera makes still objects appear to move.
 - `NO_LONGER_VISIBLE`: missing frames persist for the configured duration.
   Its interval begins at the first missed frame and ends at the next detection
   or recording end. It reports detection loss, not physical disappearance.
 
-Defaults are 50 pixels and 1000 milliseconds. Events use stable IDs and link to
+Defaults are 50 pixels and 1000 milliseconds (visibility), with a 15 px onset and a 1000 ms merge gap for movement. Events use stable IDs and link to
 the observations supporting their boundaries. A gap without enough duration
 produces no visibility event. No semantic locations or LLM interpretations are inferred here; spatial relationships are a
 separate layer (`spatial-memory.md`).

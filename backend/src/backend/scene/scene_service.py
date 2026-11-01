@@ -42,7 +42,8 @@ class _Item(BaseModel):
 
 class SceneAnalyzer:
     def __init__(self, muse, interval_ms: int = 2000, tolerance_ms: int = 500,
-                 min_confidence: float = 0.6, concurrency: int = 4, max_frame_width: int = 960):
+                 min_confidence: float = 0.6, concurrency: int = 4, max_frame_width: int = 960,
+                 settle_ms: int = 300, max_event_samples: int = 12):
         if interval_ms <= 0:
             raise ValueError("interval_ms must be positive")
         self.muse = muse
@@ -50,6 +51,8 @@ class SceneAnalyzer:
         self.tolerance_ms = tolerance_ms
         self.min_confidence = min_confidence
         self.max_frame_width = max_frame_width
+        self.settle_ms = settle_ms
+        self.max_event_samples = max_event_samples
         self._slots = asyncio.Semaphore(concurrency)
 
     async def analyze(self, video_path: Path, batch: MemoryBatch,
@@ -68,7 +71,7 @@ class SceneAnalyzer:
         end_ms = batch.video.duration_ms or max((o.timestamp_ms for o in batch.observations),
                                                 default=0)
         jobs = []
-        for t in range(0, end_ms + 1, self.interval_ms):
+        for t in self._sample_times(by_object, end_ms):
             visible = self._visible_at(by_object, t)
             if len(visible) >= 2:
                 jobs.append((t, visible))
@@ -81,6 +84,23 @@ class SceneAnalyzer:
         logger.info("Scene analysis done video_id=%s failed_samples=%d relationships=%d",
                     batch.video.video_id, sum(not s.verified for s in samples), len(relationships))
         return relationships
+
+    def _sample_times(self, by_object: dict[str, list[Observation]], end_ms: int) -> list[int]:
+        """The regular grid plus a sample just after each object appears or reappears, so a
+        relation's start is not placed up to a whole interval after the object arrived."""
+        grid = list(range(0, end_ms + 1, self.interval_ms))
+        extra = []
+        for observations in by_object.values():
+            ordered = sorted(o.timestamp_ms for o in observations)
+            if ordered[0] > 0:
+                extra.append(ordered[0] + self.settle_ms)
+            extra += [b + self.settle_ms for a, b in zip(ordered, ordered[1:], strict=False) if b - a > 1000]
+        times = set(grid)
+        min_spacing = max(self.interval_ms // 4, 1)
+        for t in sorted(set(extra))[: self.max_event_samples]:
+            if t <= end_ms and all(abs(t - other) >= min_spacing for other in times):
+                times.add(t)
+        return sorted(times)
 
     def _visible_at(self, by_object: dict[str, list[Observation]], t: int) -> dict[str, Observation]:
         visible = {}

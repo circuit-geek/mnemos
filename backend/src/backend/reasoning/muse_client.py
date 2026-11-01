@@ -27,10 +27,10 @@ def parse_json_object(text: str) -> dict:
 
 class MuseClient:
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL,
-                 base_url: str = DEFAULT_BASE_URL, client=None):
+                 base_url: str = DEFAULT_BASE_URL, client=None, timeout: float = 90):
         if client is None:
             from openai import OpenAI
-            client = OpenAI(base_url=base_url, api_key=api_key)
+            client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout, max_retries=1)
         self._client = client
         self.model = model
 

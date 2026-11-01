@@ -199,6 +199,23 @@ class Neo4jMemoryRepository:
                  "subject_object_id": r["subject_object_id"],
                  "target_object_id": r["target_object_id"]} for r in records]
 
+    def delete_video(self, video_id: str) -> None:
+        """Remove a video's whole subgraph. Done in separate statements so the optional matches
+        cannot multiply into a cartesian product."""
+        statements = (
+            "MATCH (:Video {video_id: $id})-[:CONTAINS]->(n:Observation) DETACH DELETE n",
+            "MATCH (:Video {video_id: $id})-[:HAS_EVENT]->(n:Event) DETACH DELETE n",
+            "MATCH (:Video {video_id: $id})-[:HAS_OBJECT]->(n:Object) DETACH DELETE n",
+            "MATCH (n:Video {video_id: $id}) DETACH DELETE n",
+        )
+
+        def write(tx):
+            for statement in statements:
+                tx.run(statement, id=video_id).consume()
+
+        with self.driver.session(database=self.database) as session:
+            session.execute_write(write)
+
     def get_video_objects(self, video_id: str) -> list[dict]:
         query = """MATCH (:Video {video_id: $video_id})-[:HAS_OBJECT]->(o:Object)
                    RETURN o ORDER BY o.first_seen_ms, o.object_id"""

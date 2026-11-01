@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.container import AppContainer
 from backend.services.frames import FrameService
 from backend.services.memory_queries import MemoryQueryService
+from backend.services.video_deletion import VideoDeletionService
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_queries import VideoQueryService
 from backend.workers.dispatcher import BackgroundTasksDispatcher
@@ -48,3 +49,10 @@ def get_frame_service(
     container: AppContainer = Depends(get_container),
 ) -> FrameService:
     return FrameService(session, container.storage)
+
+
+def get_deletion_service(
+    session: AsyncSession = Depends(get_session),
+    container: AppContainer = Depends(get_container),
+) -> VideoDeletionService:
+    return VideoDeletionService(session, container.storage, container.graph)

@@ -1,9 +1,13 @@
-from .conftest import MP4_BYTES
+import itertools
+
+from .conftest import MP4_BYTES, distinct_mp4
+
+_n = itertools.count(1)
 
 
 async def _upload(client, name="clip.mp4"):
     return (await client.post("/api/v1/videos",
-                              files={"file": (name, MP4_BYTES, "video/mp4")})).json()
+                              files={"file": (name, distinct_mp4(next(_n)), "video/mp4")})).json()
 
 
 async def test_list_returns_newest_first_with_object_counts_and_stage(client):
@@ -28,7 +32,7 @@ async def test_media_streams_the_upload_and_supports_range_requests(client):
     vid = (await _upload(client))["video_id"]
 
     full = await client.get(f"/api/v1/videos/{vid}/media")
-    assert full.status_code == 200 and full.content == MP4_BYTES
+    assert full.status_code == 200 and full.content.startswith(MP4_BYTES)
     assert full.headers["content-type"] == "video/mp4"
 
     part = await client.get(f"/api/v1/videos/{vid}/media", headers={"Range": "bytes=4-7"})
@@ -38,3 +42,12 @@ async def test_media_streams_the_upload_and_supports_range_requests(client):
 async def test_media_unknown_video_is_404(client):
     import uuid
     assert (await client.get(f"/api/v1/videos/{uuid.uuid4()}/media")).status_code == 404
+
+
+async def test_missing_stored_file_is_a_404_not_a_server_error(client, container):
+    vid = (await _upload(client))["video_id"]
+    for path in (container.storage.root / "videos" / vid).glob("*"):
+        path.unlink()
+
+    assert (await client.get(f"/api/v1/videos/{vid}/media")).status_code == 404
+    assert (await client.get(f"/api/v1/videos/{vid}/frames/500")).status_code == 404

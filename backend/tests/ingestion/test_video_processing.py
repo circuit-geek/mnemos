@@ -9,7 +9,7 @@ from backend.models import JobStatus, Observation, ProcessingJob, TrackedObject,
 from backend.services.video_ingestion import VideoIngestionService
 from backend.services.video_processing import VideoProcessingService
 
-from .conftest import FIXTURE_DIR, MP4_BYTES
+from .conftest import FIXTURE_DIR, distinct_mp4
 
 
 class NoopDispatcher:
@@ -22,10 +22,17 @@ class FailingSam:
         raise SamProcessingError("boom")
 
 
+_queued_count = 0
+
+
 async def _queued(container):
+    global _queued_count
+    _queued_count += 1  # distinct bytes each time, or the upload would be de-duplicated
     async with container.session_factory() as session:
         service = VideoIngestionService(session, container.storage, NoopDispatcher(), 10_000)
-        video, job = await service.ingest(io.BytesIO(MP4_BYTES), "x.mp4", "video/mp4")
+        video, job, _ = await service.ingest(
+            io.BytesIO(distinct_mp4(_queued_count)), "x.mp4", "video/mp4"
+        )
     return video.id, job.id
 
 

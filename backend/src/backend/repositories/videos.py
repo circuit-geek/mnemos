@@ -18,6 +18,20 @@ class VideoRepository:
     async def get(self, video_id: uuid.UUID) -> Video | None:
         return await self.session.get(Video, video_id)
 
+    async def find_reusable(self, content_hash: str) -> list[Video]:
+        """Videos with identical content that are finished or still being processed, newest first."""
+        stmt = (
+            select(Video)
+            .where(Video.content_hash == content_hash)
+            .where(Video.status.in_((VideoStatus.QUEUED, VideoStatus.PROCESSING, VideoStatus.COMPLETED)))
+            .order_by(Video.created_at.desc())
+        )
+        return list((await self.session.execute(stmt)).scalars())
+
+    async def delete(self, video: Video) -> None:
+        await self.session.delete(video)
+        await self.session.flush()
+
     async def set_status(self, video: Video, status: VideoStatus) -> None:
         video.status = status
         await self.session.flush()

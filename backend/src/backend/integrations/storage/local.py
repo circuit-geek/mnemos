@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import BinaryIO
 
-from backend.core.exceptions import StorageError
+from backend.core.exceptions import StorageError, StorageObjectNotFoundError
 
 
 class LocalObjectStorage:
@@ -30,7 +30,10 @@ class LocalObjectStorage:
         return await asyncio.to_thread(write)
 
     async def get_download_reference(self, key: str) -> str:
-        return str(self._path(key))
+        path = self._path(key)
+        if not path.is_file():
+            raise StorageObjectNotFoundError(f"Object not found: {key}")
+        return str(path)
 
     async def delete_file(self, key: str) -> None:
         await asyncio.to_thread(self._path(key).unlink, missing_ok=True)
@@ -39,5 +42,5 @@ class LocalObjectStorage:
     async def open_local_copy(self, key: str) -> AsyncIterator[Path]:
         path = self._path(key)
         if not path.is_file():
-            raise StorageError(f"Object not found: {key}")
+            raise StorageObjectNotFoundError(f"Object not found: {key}")
         yield path

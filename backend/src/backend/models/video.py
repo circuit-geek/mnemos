@@ -21,6 +21,8 @@ class Video(Base):
     original_filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100))
     storage_key: Mapped[str] = mapped_column(String(512))
+    # SHA-256 of the uploaded bytes; identical re-uploads reuse the finished analysis.
+    content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     status: Mapped[VideoStatus] = mapped_column(
         string_enum(VideoStatus), default=VideoStatus.UPLOADED, index=True
     )

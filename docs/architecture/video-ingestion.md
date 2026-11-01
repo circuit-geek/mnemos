@@ -17,12 +17,14 @@ POST /api/v1/videos (file, optional concepts)
 Layers: `api` -> `services` -> `repositories` / integration protocols. Services depend only on
 the protocols `ObjectStorage`, `SamClient`, `GraphWriter`, `ProcessingDispatcher`.
 
-## Upload validation
+## Upload validation and de-duplication
 
 Content type must be mp4, mov or webm, the container magic bytes must match, the file must be
 non-empty and within `MAX_UPLOAD_BYTES` (500 MB). The optional `concepts` form field is a
 comma-separated list (max 8 short plain names, validated in `core/concepts.py`); invalid input
 returns 400 before anything is stored.
+
+The SHA-256 of the bytes is stored on the video. An upload whose hash and requested concepts match a video that is completed or still in progress returns that video (`reused: true`, HTTP 200); failed videos are never reused. This makes re-uploading a demo clip instant and avoids paying for the same analysis twice.
 
 ## Status model
 
@@ -33,6 +35,14 @@ returns 400 before anything is stored.
 `2/4 tracked: mug, pen, notebook, phone`. A stage is committed only when that work starts, so
 the UI shows real progress. The progress callback is serialised with a lock because SAM runs
 overlap and share one session.
+
+## Identity linking
+
+SAM gives an object that left view and returned a new tracking ID, so one mug could become two. After tracking, `integrations/meta/identity.link_split_tracks` merges same-label tracks only when it is unambiguous: they never overlap in time, the gap is at most 8 s, and no other track of that label is visible during the gap. The merged track keeps the first ID; the gap becomes a `NO_LONGER_VISIBLE` interval instead of a disappearance plus a new object, and the merge is logged and recorded in the object's attributes (`linked_tracking_ids`). When anything is ambiguous (two mugs, a long absence) the tracks stay separate.
+
+## Frame timestamps
+
+The SAM result carries the timestamp of every source frame, because observations refer to frames by number. Event detection indexes that list, so it must contain every frame, not only those with detections.
 
 ## Per-video concepts
 
@@ -81,6 +91,14 @@ The result also carries the frame width/height, stored on `Video` so the UI can 
 the deterministic detector (`temporal-memory.md`) and spatial relations (`spatial-memory.md`).
 `NEO4J_ENABLED=false` swaps in `NullGraphWriter` (no memory, graph or `ask` endpoints).
 When enabled, startup fails fast if Neo4j is unreachable.
+
+## Restarts and timeouts
+
+Jobs run in-process, so on startup `services/recovery.fail_interrupted_jobs` marks any video or job left unfinished by a previous process as failed ("Interrupted by a backend restart... Upload the video again") instead of leaving the UI spinning. Each SAM run (`SAM_TIMEOUT_SECONDS`, default 600) and each Muse call (`MUSE_TIMEOUT_SECONDS`, default 90) has a timeout that fails the job with a clear message.
+
+## Deleting a video
+
+`DELETE /videos/{id}` removes the graph subgraph (observations, events, objects, relations, video node), the relational rows, and the stored file. It refuses while the video is still being processed.
 
 ## Failure policy
 

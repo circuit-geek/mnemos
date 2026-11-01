@@ -24,4 +24,5 @@ Stack: React, TypeScript (strict), Vite, Tailwind CSS v4, Radix primitives (shad
 
 - **Upload** sends the file (and optional comma-separated objects to track) to the backend, then opens the explorer, which shows the real pipeline stage while the original video plays. It switches to the results when the backend reports completion.
 - **Detections** are drawn from stored observations. An object not detected within 0.5 s of the playhead is shown as not visible; a stale box is never reused.
-- **Ask MNEMOS** shows the actual Muse Spark answer, how the question was interpreted, and its cited evidence with video frames. Failures are shown as errors; nothing falls back to canned answers.
+- **Library** lists recordings with a delete button (removes the video, its graph and its stored file; unavailable while processing). Re-uploading an identical file opens the existing result.
+- **Ask MNEMOS** shows the actual Muse Spark answer, how the question was interpreted, and its cited evidence with video frames. The evidence frames show the cited objects' boxes, and the cited moments appear as an "Answer evidence" lane on the timeline. Failures are shown as errors; nothing falls back to canned answers.

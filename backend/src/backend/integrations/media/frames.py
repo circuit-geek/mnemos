@@ -11,6 +11,16 @@ FFMPEG_TIMEOUT_SECONDS = 30
 
 
 async def extract_frame_jpeg(path: str, timestamp_ms: int, max_width: int | None = None) -> bytes:
+    """One JPEG frame at `timestamp_ms`. Seeking onto or past the last frame's start time yields
+    nothing in ffmpeg, so fall back to slightly earlier times (still the closest frame)."""
+    for back_off_ms in (0, 150, 400):
+        frame = await _extract_once(path, max(timestamp_ms - back_off_ms, 0), max_width)
+        if frame:
+            return frame
+    raise FrameNotFoundError(f"No frame at {timestamp_ms}ms")
+
+
+async def _extract_once(path: str, timestamp_ms: int, max_width: int | None) -> bytes:
     command = ["ffmpeg", "-v", "error", "-ss", f"{timestamp_ms / 1000:.3f}", "-i", path,
                "-frames:v", "1"]
     if max_width:
@@ -27,8 +37,6 @@ async def extract_frame_jpeg(path: str, timestamp_ms: int, max_width: int | None
     if process.returncode != 0:
         logger.warning("ffmpeg failed: %s", err.decode(errors="replace")[:300])
         raise FrameNotFoundError("Frame extraction failed")
-    if not out:
-        raise FrameNotFoundError(f"No frame at {timestamp_ms}ms")
     return out
 
 

@@ -19,6 +19,11 @@ FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "sam_sample"
 MP4_BYTES = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 
 
+def distinct_mp4(n: int) -> bytes:
+    """A valid-looking upload whose bytes (and so content hash) differ per `n`."""
+    return MP4_BYTES + n.to_bytes(4, "big")
+
+
 class RecordingGraphWriter:
     def __init__(self) -> None:
         self.calls: list[tuple] = []

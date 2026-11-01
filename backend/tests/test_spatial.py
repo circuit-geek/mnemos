@@ -18,7 +18,6 @@ from backend.reasoning.retrieval import GraphRetriever
 from backend.scene import scene_service
 from backend.scene.intervals import Detected, Sample, build_relationships
 from backend.scene.scene_service import SceneAnalyzer
-
 from test_reasoning import FakeRepository
 
 V = "video-1"
@@ -133,7 +132,8 @@ def no_ffmpeg(monkeypatch):
 def analyze(muse, **kwargs):
     batch = build_memory_batch("11111111-1111-1111-1111-111111111111", "c.mp4",
                                datetime.now(UTC), result())
-    analyzer = SceneAnalyzer(muse, interval_ms=2000, **kwargs)
+    # These tests are about the regular grid; adaptive extra samples have their own tests below.
+    analyzer = SceneAnalyzer(muse, interval_ms=2000, **{"max_event_samples": 0, **kwargs})
     return batch, asyncio.run(analyzer.analyze(Path("x.mp4"), batch, (100, 100)))
 
 
@@ -319,3 +319,128 @@ def test_before_appearance_lists_present_objects_even_when_no_relation_matches()
                                   relation_type="INSIDE"), rels=[stored("r9", "o1", "ON", "o3", 9000, None)])
     assert result.problem is None
     assert sorted(e.graph_id for e in result.evidence if e.kind == "object") == ["o1", "o3"]
+
+
+# --- NEAR / NEXT_TO flicker is one proximity interval ----------------------------------------
+
+def test_flipping_between_near_and_next_to_is_one_interval_labelled_by_the_majority():
+    flips = ["NEAR", "NEXT_TO", "NEXT_TO", "NEAR", "NEXT_TO"]
+    samples = [Sample(i * 2000, frozenset("AB"), [detected(kind)]) for i, kind in enumerate(flips)]
+    [rel] = build_relationships(V, samples)
+    assert rel.relation_type == "NEXT_TO" and rel.valid_from_ms == 0 and rel.valid_to_ms is None
+
+
+def test_tie_between_near_and_next_to_prefers_the_stronger_next_to():
+    samples = [Sample(0, frozenset("AB"), [detected("NEAR")]),
+               Sample(2000, frozenset("AB"), [detected("NEXT_TO")])]
+    assert build_relationships(V, samples)[0].relation_type == "NEXT_TO"
+
+
+def test_proximity_ends_when_unreported_and_on_is_still_separate():
+    samples = [Sample(0, frozenset("AB"), [detected("NEAR")]),
+               Sample(2000, frozenset("AB"), [detected("ON", "A", "B")])]
+    near, on = build_relationships(V, samples)
+    assert (near.relation_type, near.valid_to_ms) == ("NEAR", 2000)
+    assert (on.relation_type, on.valid_from_ms) == ("ON", 2000)
+
+
+# --- COMPARE: how the scene differs between two moments --------------------------------------
+
+class CompareRepo(FakeRepository):
+    """mug visible 0-18 s; book appears at 8 s; pen visible only until 4 s."""
+
+    def get_observation_at_or_before(self, video_id, object_id, timestamp_ms):
+        end = {"o1": 18000, "o2": 18000, "o3": 4000}[object_id]
+        t = min(timestamp_ms, end)
+        return {"observation_id": "x", "timestamp_ms": t, "frame_index": 0, "bounding_box": [1, 1, 2, 2]}
+
+
+COMPARE_RELS = [stored("r1", "o1", "NEXT_TO", "o3", 0, 4000), stored("r2", "o1", "ON", "o2", 10000, None)]
+
+
+def compare(start, end, label=None, rels=COMPARE_RELS):
+    repo = CompareRepo(objects=(MUG, BOOK, PEN), relationships=rels)
+    return GraphRetriever(repo).retrieve("v", QueryIntent(
+        intent=Intent.COMPARE, start_seconds=start, end_seconds=end, object_label=label))
+
+
+def texts(result):
+    return [e.text for e in result.evidence]
+
+
+def test_compare_reports_objects_that_appeared_or_left_view():
+    result = compare(2, 14)
+    joined = " ".join(texts(result))
+    assert "'book' was not yet seen at 2.00s and visible at 14.00s" in joined
+    assert "'pen' was visible at 2.00s and not visible at 14.00s" in joined
+    assert "'mug' was" not in joined  # an unchanged object has no visibility line
+
+
+def test_compare_reports_relations_that_began_and_ended():
+    joined = " ".join(texts(compare(2, 14)))
+    assert "'mug' NEXT_TO 'pen' held at 2.00s but was not verified at 14.00s" in joined
+    assert "'mug' ON 'book' was not verified at 2.00s but held at 14.00s" in joined
+
+
+def test_compare_defaults_to_start_and_end_of_the_video_and_orders_the_moments():
+    default = compare(None, None)
+    assert "at 0.00s" in " ".join(texts(default)) and "18.00s" in " ".join(texts(default))
+    assert texts(compare(14, 2)) == texts(compare(2, 14))
+
+
+def test_compare_can_focus_on_one_object():
+    joined = " ".join(texts(compare(2, 14, label="book")))
+    assert "'book'" in joined and "'pen' was" not in joined and "NEXT_TO" not in joined
+
+
+def test_compare_says_so_when_nothing_differs():
+    result = compare(11, 13)
+    assert len(result.evidence) == 1 and "No tracked object" in result.evidence[0].text
+
+
+def test_compare_needs_two_distinct_moments():
+    assert compare(5, 5).problem
+
+
+# --- adaptive sampling ------------------------------------------------------------------------
+
+def _appearance_result(first_seen_book: float):
+    def obs(tid, label, ts, frame):
+        return ObservationResult(tracking_id=tid, label=label, timestamp_seconds=ts, frame_number=frame,
+                                 bbox=[10, 10, 50, 50])
+    steps = [0, 1, 2, 3, 4, 5, 6]
+    return VideoProcessingResult(
+        duration_seconds=6.0, width=100, height=100,
+        objects=[TrackedObjectResult(tracking_id="mug-0", label="mug", first_seen_seconds=0, last_seen_seconds=6),
+                 TrackedObjectResult(tracking_id="book-0", label="book", first_seen_seconds=first_seen_book,
+                                     last_seen_seconds=6)],
+        observations=[obs("mug-0", "mug", t, i) for i, t in enumerate(steps)]
+        + [obs("book-0", "book", t, 20 + i) for i, t in enumerate(steps) if t >= first_seen_book])
+
+
+def sampled_times(result_obj):
+    muse = ScriptedScene(*[{"relationships": []}] * 20)
+    batch = build_memory_batch("11111111-1111-1111-1111-111111111111", "c.mp4", datetime.now(UTC), result_obj)
+    asyncio.run(SceneAnalyzer(muse, interval_ms=2000).analyze(Path("x.mp4"), batch, (100, 100)))
+    return [round(c["frame_time_seconds"], 1) for c in muse.calls]
+
+
+def test_a_sample_is_added_just_after_an_object_appears_off_the_grid():
+    # the book appears at 3 s. Grid samples are 0, 2, 4, 6, but 0 and 2 have only the mug in view.
+    # Without the extra sample the first relation could only start at 4.0 s; now it can at 3.3 s.
+    assert sampled_times(_appearance_result(3.0)) == [3.3, 4.0, 6.0]
+
+
+def test_no_extra_sample_when_the_appearance_is_already_covered_by_the_grid():
+    assert sampled_times(_appearance_result(2.0)) == [2.0, 4.0, 6.0]
+
+
+def test_extra_samples_are_capped():
+    from backend.scene.scene_service import SceneAnalyzer as A
+    analyzer = A(ScriptedScene(), interval_ms=2000, max_event_samples=2)
+    from backend.memory.models import Observation
+    by_object = {f"o{i}": [Observation(observation_id=f"b{i}", video_id="v", object_id=f"o{i}",
+                                       timestamp_ms=1100 + i * 700, frame_index=i,
+                                       bounding_box=[1, 1, 2, 2])] for i in range(6)}
+    extras = [t for t in analyzer._sample_times(by_object, 10000) if t % 2000]
+    assert len(extras) <= 2

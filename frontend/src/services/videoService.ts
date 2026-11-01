@@ -104,6 +104,11 @@ export const videoService = {
     return toVideo(await apiFetch<ApiVideo>(`/videos/${encodeURIComponent(videoId)}`));
   },
 
+  /** DELETE /api/v1/videos/{videoId} — removes the recording and everything derived from it. */
+  async deleteVideo(videoId: string): Promise<void> {
+    await apiFetch<void>(`/videos/${encodeURIComponent(videoId)}`, { method: "DELETE" });
+  },
+
   /**
    * POST /api/v1/videos (multipart). `concepts` is a comma-separated list of objects to
    * track; leave it empty to let the backend discover them from the video.

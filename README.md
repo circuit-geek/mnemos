@@ -22,7 +22,7 @@ Built for the Meta Global AI Developer Hackathon 2026.
 | Memory | Stores objects, observations, relations and events with validity intervals | Neo4j + Postgres |
 | Reasoning | Interprets a question, retrieves matching graph facts, answers citing evidence | Meta Muse Spark |
 
-Every answer cites retrieved evidence (observations, events, relations) with a video frame. An answer that cites nothing is withheld, and the model never writes Cypher: each question intent maps to fixed, parameterised graph queries.
+Every answer cites retrieved evidence (observations, events, relations, comparisons between two moments) with a video frame. An answer that cites nothing is withheld, and the model never writes Cypher: each question intent maps to fixed, parameterised graph queries.
 
 ## Architecture
 
@@ -102,7 +102,8 @@ graph LR
   O -->|ON / NEXT_TO / NEAR / INSIDE<br/>valid_from_ms, valid_to_ms| O2[Object]
 ```
 
-- Events: `APPEARED`, `MOVED`, `NO_LONGER_VISIBLE`. The last reports detection loss, not proof that the object physically left.
+- Events: `APPEARED`, `MOVED`, `NO_LONGER_VISIBLE`. `NO_LONGER_VISIBLE` reports detection loss, not proof that the object physically left. `MOVED` is movement in the video frame, merged into continuous movements, and a handheld camera makes still objects appear to move. An object that leaves view and returns keeps one identity when that is unambiguous ([ADR 0004](docs/decisions/0004-conservative-identity-linking.md)).
+- `NEAR`/`NEXT_TO` between one pair form a single proximity interval, so the graph does not flicker.
 - Relations carry a validity interval (`valid_from_ms <= t < valid_to_ms`), so historical queries return the state at a given timestamp.
 
 Details: [`docs/architecture/`](docs/architecture) and [`docs/api/backend-api.md`](docs/api/backend-api.md).
@@ -210,6 +211,7 @@ The API is served at http://localhost:8000. Edit `backend/.env` first:
 | `META_API_KEY` | Meta Model API key (SAM, Muse Spark) |
 | `MUSE_MODEL` | Defaults to `muse-spark-1.3` |
 | `SAM_MAX_CONCEPTS`, `SCENE_SAMPLE_INTERVAL_MS`, `SCENE_MIN_CONFIDENCE` | Tracking and scene-analysis tuning |
+| `SAM_TIMEOUT_SECONDS`, `MUSE_TIMEOUT_SECONDS` | A hung SAM run or Muse call fails the job instead of blocking it |
 | `FRONTEND_ORIGINS` | CORS origins, default `http://localhost:5173` |
 
 Quick API check:
@@ -239,6 +241,9 @@ Open the app, upload a video (optionally list objects to track, e.g. `mug, noteb
 
 ### CLI utilities
 
+`backend/scripts/record_scenario_fixtures.py` records a processed video's memory and real Muse answers as test fixtures (`backend/fixtures/scenarios`).
+
+
 ```bash
 cd backend
 # Ingest a saved SAM experiment into Neo4j
@@ -247,10 +252,14 @@ uv run python scripts/ingest_memory.py <experiment_dir> --video-id <id>
 uv run python scripts/ask_memory.py --video-id <id> "When did the mug disappear?"
 ```
 
+### Demo clips
+
+Three short recordings are in [`demo/`](demo) with the questions worth asking about each.
+
 ### Tests
 
 ```bash
-cd backend && uv run pytest        # uses saved fixtures; no live model calls
+cd backend && uv run pytest        # saved fixtures (including recorded real runs); no live model calls
 cd frontend && npm run build       # typecheck + production build
 ```
 
@@ -258,6 +267,8 @@ cd frontend && npm run build       # typecheck + production build
 
 - The API has no authentication and is meant for one local user; do not expose it to the internet.
 - Uploaded videos are stored on local disk.
+- A handheld camera makes still objects appear to move; there is no camera-motion compensation.
+- Uploading the same file with the same objects again reuses the earlier result (use the delete button first to force reprocessing).
 - Object identity is scoped to one recording and can split across long occlusions.
 - Relation boundaries are accurate only to the scene sampling interval.
 - Background jobs do not survive a backend restart.

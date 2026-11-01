@@ -11,6 +11,8 @@ class VideoAcceptedResponse(BaseModel):
     video_id: uuid.UUID
     job_id: uuid.UUID
     status: VideoStatus
+    # True when an identical upload (same bytes and concepts) already exists and is reused.
+    reused: bool = False
 
 
 class ProcessingJobRead(BaseModel):

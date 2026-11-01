@@ -2,6 +2,9 @@
 
 from .models import Evidence, Intent, QueryIntent, RetrievalResult
 
+# An object counts as visible at t only if it was detected this recently (mirrors the frontend).
+VISIBLE_GAP_MS = 500
+
 
 def seconds(ms: int) -> str:
     return f"{ms / 1000:.2f}s"
@@ -83,6 +86,7 @@ class GraphRetriever:
             Intent.CHANGES: self._changes,
             Intent.SCENE_AT_TIME: self._scene_at_time,
             Intent.RELATIONSHIPS: self._relationships,
+            Intent.COMPARE: self._compare,
         }[intent.intent]
         ledger = _Ledger()
         problem = handler(video_id, intent, selected, ledger)
@@ -175,6 +179,53 @@ class GraphRetriever:
         end = None if intent.end_seconds is None else int(intent.end_seconds * 1000)
         return (end is None or r["valid_from_ms"] <= end) and (
             r.get("valid_to_ms") is None or r["valid_to_ms"] > start)
+
+    def _compare(self, video_id, intent, selected, ledger):
+        """State difference between two moments: who was in view, and which relations held."""
+        everything = self.repository.get_video_objects(video_id)
+        end_of_video = max(o["last_seen_ms"] for o in everything)
+        a = int((intent.start_seconds or 0) * 1000)
+        b = end_of_video if intent.end_seconds is None else int(intent.end_seconds * 1000)
+        if a > b:
+            a, b = b, a
+        if a == b:
+            return "Two different moments are needed to compare."
+        labels = {o["object_id"]: o["label"] for o in everything}
+
+        def state(o, t):
+            if o["first_seen_ms"] > t:
+                return "not yet seen"
+            last = self.repository.get_observation_at_or_before(video_id, o["object_id"], t)
+            visible = last is not None and t - last["timestamp_ms"] <= VISIBLE_GAP_MS
+            return "visible" if visible else "not visible"
+
+        changed = False
+        for o in selected:
+            before, after = state(o, a), state(o, b)
+            if before != after:
+                changed = True
+                ledger.add("C", "comparison",
+                           f"'{o['label']}' was {before} at {seconds(a)} and {after} at {seconds(b)}.",
+                           b, o["object_id"])
+        stored = self.repository.get_video_relationships(video_id)
+        wanted = {o["object_id"] for o in selected} if intent.object_label else None
+        for r in stored:
+            if wanted is not None and not ({r["subject_object_id"], r["target_object_id"]} & wanted):
+                continue
+            then, now = self._holds_at(r, a), self._holds_at(r, b)
+            if then == now:
+                continue
+            changed = True
+            names = f"'{labels[r['subject_object_id']]}' {r['relation_type']} '{labels[r['target_object_id']]}'"
+            if now:
+                text, at = f"{names} was not verified at {seconds(a)} but held at {seconds(b)}.", b
+            else:
+                text, at = f"{names} held at {seconds(a)} but was not verified at {seconds(b)}.", a
+            ledger.add("C", "comparison", text, at, r["relationship_id"])
+        if not changed:
+            ledger.add("C", "comparison",
+                       f"No tracked object's visibility and no verified relationship differs "
+                       f"between {seconds(a)} and {seconds(b)}.", a)
 
     @staticmethod
     def _holds_at(r, t):

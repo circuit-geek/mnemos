@@ -181,6 +181,7 @@ Support these initial query intents:
 - `OBJECT_HISTORY`
 - `SCENE_AT_TIME`
 - `RELATIONSHIPS`
+- `COMPARE` (how the scene differs between two moments)
 
 Use deterministic Cypher query templates for the MVP.
 

@@ -16,12 +16,17 @@ Return ONLY a JSON object: {"intent": ..., "object_label": string|null, "time_se
 Intents:
 - LAST_SEEN: when/where an object was last seen, disappeared, vanished, left, went missing.
 - OBJECT_HISTORY: what happened to an object overall, its timeline.
-- CHANGES: what changed in the video or within a time window (set start/end seconds if given).
+- CHANGES: what happened over time, as a list of events, in the whole video or a time window (set
+  start/end seconds if given). Use COMPARE instead when the question contrasts two specific moments.
 - SCENE_AT_TIME: what was happening at one specific moment (set time_seconds; object_label if one is named).
 - RELATIONSHIPS: spatial relations between objects (on, next to, inside, near, contains). Set
   object_label to the object asked about, relation_type if one relation is asked for ("what is the mug on"
   -> ON; "what is inside the bag" -> object_label bag, relation_type INSIDE), and time_seconds or
   start/end seconds if a moment or window is given. Omit times to get how relations evolved overall.
+- COMPARE: how the scene differs between two moments ("compare the start and the end", "what is
+  different at 15 seconds compared to 5", "how did the layout change between 5 and 15 seconds"). Set
+  start_seconds to the earlier moment and end_seconds to the later one; leave them null for the start and
+  end of the video.
 - UNSUPPORTED: anything else.
 object_label and before_appearance_of must be one of known_objects (copy exactly) or null.
 Use before_appearance_of for "before the notebook appeared" (then leave time_seconds null).
@@ -42,6 +47,8 @@ Rules:
   An object leaving view does not end its relation. A surface such as a desk or table is not a tracked
   object: for "what was on the desk", answer with the tracked objects that were present and any verified
   relations between them, and say the surface itself is not tracked.
+- Movement is measured in the video frame. If the camera was moved, still objects appear to move too, so
+  say "moved in the frame" and do not claim an object physically moved unless the evidence says more.
 - Track identities are scoped to this recording and are not verified physical identities.
 - sufficient_evidence is about whether the evidence answers the question as far as detection data allows.
   Report detection gaps with their caveat and keep sufficient_evidence true; only set it false when the

@@ -102,3 +102,46 @@ def test_repository_batches_parameterized_observations(tmp_path):
             return Result()
 
     assert Neo4jMemoryRepository._save_observations(Tx(), batch.observations) == 4
+
+
+def _walking_object(frames_still_then_moving):
+    """One object whose box centre x is given per frame (30 fps, 33 ms apart)."""
+    from datetime import UTC, datetime
+
+    from backend.memory.models import MemoryBatch, Observation, TrackedObject, Video
+
+    n = len(frames_still_then_moving)
+    times = [i * 33 for i in range(n)]
+    obj = TrackedObject(object_id="o", video_id="v", tracking_id="1", label="mug",
+                        first_seen_ms=0, last_seen_ms=times[-1])
+    obs = [Observation(observation_id=f"b{i}", video_id="v", object_id="o", timestamp_ms=times[i],
+                       frame_index=i, bounding_box=[x, 10, x + 40, 50])
+           for i, x in enumerate(frames_still_then_moving)]
+    video = Video(video_id="v", filename="c.mp4", duration_ms=times[-1], created_at=datetime.now(UTC))
+    return MemoryBatch(video=video, objects=[obj], observations=obs, frame_timestamps_ms=times)
+
+
+def test_continuous_movement_is_one_event_that_starts_when_motion_starts():
+    from backend.memory.events import EventDetector
+
+    # still for 60 frames (2 s), then 10 px per frame for 60 frames (about 2 s of steady motion)
+    xs = [100] * 60 + [100 + 10 * i for i in range(1, 61)]
+    moved = [e for e in EventDetector().detect(_walking_object(xs)) if e.event_type == "MOVED"]
+    assert len(moved) == 1
+    assert 1900 <= moved[0].start_time_ms <= 2100  # onset, not the start of the recording
+    assert moved[0].end_time_ms >= 3900
+
+
+def test_separate_movements_stay_separate_events():
+    from backend.memory.events import EventDetector
+
+    xs = [100] * 10 + [100 + 10 * i for i in range(1, 11)] + [200] * 90 + [200 + 10 * i for i in range(1, 11)]
+    moved = [e for e in EventDetector().detect(_walking_object(xs)) if e.event_type == "MOVED"]
+    assert len(moved) == 2 and moved[0].end_time_ms < moved[1].start_time_ms
+
+
+def test_jitter_below_the_onset_threshold_is_not_movement():
+    from backend.memory.events import EventDetector
+
+    xs = [100 + (i % 3) * 2 for i in range(120)]
+    assert not [e for e in EventDetector().detect(_walking_object(xs)) if e.event_type == "MOVED"]

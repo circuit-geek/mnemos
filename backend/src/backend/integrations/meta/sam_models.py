@@ -32,6 +32,10 @@ class VideoProcessingResult(BaseModel):
     frame_count: int | None = None
     width: int | None = None
     height: int | None = None
+    # Timestamp of every source frame, in order. `ObservationResult.frame_number` indexes this list.
+    frame_timestamps_seconds: list[float] = Field(default_factory=list)
+    # Tracks merged into another because the object left view and returned: {kept id: [merged ids]}.
+    linked_tracks: dict[str, list[str]] = Field(default_factory=dict)
     # Concepts SAM was run for (requested or discovered), whether or not each produced tracks.
     concepts: list[str] = Field(default_factory=list)
     objects: list[TrackedObjectResult] = Field(default_factory=list)

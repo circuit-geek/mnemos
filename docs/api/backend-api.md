@@ -6,7 +6,8 @@ CORS origins come from `FRONTEND_ORIGINS` (comma-separated).
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/videos` | Upload (multipart `file`, optional `concepts`: comma-separated objects to track, e.g. `mug, notebook`; omit to let the model discover them per video; invalid names return 400). 202 `{video_id, job_id, status}`; processing runs in the background and builds temporal memory (objects, observations, events). |
+| POST | `/videos` | Upload (multipart `file`, optional `concepts`: comma-separated objects to track, e.g. `mug, notebook`; omit to let the model discover them per video; invalid names return 400). 202 `{video_id, job_id, status, reused}`; processing runs in the background and builds temporal memory (objects, observations, events, relations). An upload with the same bytes and concepts as a finished or in-progress video returns **200** with that video and `reused: true`, so nothing is processed or paid for twice. |
+| DELETE | `/videos/{id}` | Removes the recording, its stored file and everything derived from it (graph, observations, jobs). 204; 409 while it is still processing. |
 | GET | `/videos` | Recent videos, newest first (`limit`), each with `object_count`, `width`/`height`, concepts and its latest job. |
 | GET | `/videos/{id}` | Video and processing job status, plus `requested_concepts`, `tracked_concepts` and `width`/`height`. `processing_job.stage` is the stage actually reached (`queued`, `discovering`, `tracking`, `building_memory`, `analyzing_scene`, `completed`, `failed`) and `stage_detail` a short note (e.g. `2/4 tracked: mug, pen, notebook, phone`). Poll until `completed`. |
 | GET | `/videos/{id}/media` | The original upload for playback; supports HTTP range requests. |
@@ -20,11 +21,13 @@ CORS origins come from `FRONTEND_ORIGINS` (comma-separated).
 | GET | `/videos/{id}/graph?at_seconds=` | `{nodes, edges}` for React Flow; edges are `HAS_OBJECT`, `PARTICIPATED_IN` and the spatial relation types. With `at_seconds`, only objects and events known by that moment, with each object's latest observation. |
 | GET | `/videos/{id}/frames/{timestamp_ms}` | JPEG frame of the stored video at that time (extracted with ffmpeg; takes no file paths). |
 
+Answer evidence has a `kind`: `object`, `event`, `observation`, `relationship`, or `comparison` (a difference between two moments, from the `COMPARE` intent).
+
 Evidence: every `evidence_uri` in `ask`, `history` and `graph` responses is a relative frame URL
 (`/api/v1/videos/{id}/frames/{timestamp_ms}`) to prepend with the API base, never a server path.
 It is `null` for evidence with no timestamp.
 
-Errors: 400 invalid upload or concepts, 404 unknown video or no frame at that time, 413 file too large, 415 unsupported type, 422 invalid input, 502 model failure, 503 memory or reasoning not configured.
+Errors: 400 invalid upload or concepts, 404 unknown video, missing stored file, or no frame at that time, 409 video still processing, 413 file too large, 415 unsupported type, 422 invalid input, 502 model failure, 503 memory or reasoning not configured.
 
 The API has no authentication; it is meant to run locally for one user (`docs/decisions/0001-local-only-scope.md`). Do not expose it to the internet as is.
-`NO_LONGER_VISIBLE` means the tracker stopped detecting an object, not that it physically left.
+`NO_LONGER_VISIBLE` means the tracker stopped detecting an object, not that it physically left. `MOVED` means movement in the video frame; a handheld camera makes still objects appear to move.

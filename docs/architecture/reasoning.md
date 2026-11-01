@@ -10,7 +10,7 @@ Served by `POST /api/v1/videos/{id}/ask` (see `docs/api/backend-api.md`) and by
   Responses API at `https://api.meta.ai/v1`. Text and image input are both used (image input for
   concept discovery and spatial verification, see `spatial-memory.md`).
 - Intents: `LAST_SEEN`, `CHANGES`, `OBJECT_HISTORY`, `SCENE_AT_TIME`, `RELATIONSHIPS`,
-  `UNSUPPORTED`. The model never writes Cypher; each intent maps to fixed repository methods in
+  `COMPARE`, `UNSUPPORTED`. The model never writes Cypher; each intent maps to fixed repository methods in
   `backend/reasoning/retrieval.py`.
 - Beyond the intent, the interpreter fills optional fields: `object_label` (must be a known
   object), `time_seconds` or `start_seconds`/`end_seconds`, `relation_type`
@@ -21,6 +21,10 @@ Served by `POST /api/v1/videos/{id}/ask` (see `docs/api/backend-api.md`) and by
   holding at that moment. Asking for `NEAR` also returns `NEXT_TO`. If the requested relation type
   has no match, a note plus the relations that were verified are returned so the answer can say
   "not ON, but NEXT_TO". Surfaces such as a desk are not tracked objects.
+- `COMPARE` contrasts two moments (`start_seconds` and `end_seconds`, defaulting to the start and end of
+  the video): objects that came into or left view, relations that began or ended, as `comparison`
+  evidence. If nothing differs it says so as evidence. `CHANGES` is the event list over time;
+  `COMPARE` is the state difference between two moments.
 - `UNSUPPORTED` questions, a missing object label or time, and empty results return an explicit
   insufficient-evidence answer without asking the model to answer.
 - An answer that cites no retrieved evidence ID is withheld; unknown cited IDs are dropped.
@@ -30,7 +34,7 @@ Served by `POST /api/v1/videos/{id}/ask` (see `docs/api/backend-api.md`) and by
 ## Response
 
 `{question, intent, answer, sufficient_evidence, evidence[]}`. Each evidence item has an ID,
-kind (`object`, `event`, `observation`, `relationship`, `note`), a timestamp, text, the graph ID it
+kind (`object`, `event`, `observation`, `relationship`, `comparison`, `note`), a timestamp, text, the graph ID it
 refers to, and a frame URL (`/api/v1/videos/{id}/frames/{ms}`), never a server path.
 
 ## Run from the terminal

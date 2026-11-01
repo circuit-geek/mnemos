@@ -33,3 +33,28 @@ async def test_writer_ingests_detected_events_with_batch():
 
     assert {e.event_type for e in repo.events} >= {"APPEARED"}
     assert len(repo.events) >= len(repo.batch.objects)
+
+
+def test_frames_with_no_detections_do_not_shift_event_times():
+    """A lone object vanishes for several whole frames; later frame numbers must still map to
+    the right timestamps (previously the timestamp list skipped undetected frames)."""
+    from backend.integrations.meta.sam_models import (
+        ObservationResult,
+        TrackedObjectResult,
+        VideoProcessingResult,
+    )
+    from backend.memory.events import EventDetector
+
+    stamps = [i * 0.5 for i in range(10)]  # frames at 0.0 .. 4.5 s
+    seen = [0, 1, 7, 8, 9]  # undetected for frames 2-6 (1.0 s to 3.5 s)
+    result = VideoProcessingResult(
+        duration_seconds=4.5, width=100, height=100, frame_timestamps_seconds=stamps,
+        objects=[TrackedObjectResult(tracking_id="1", label="mug", first_seen_seconds=0,
+                                     last_seen_seconds=4.5)],
+        observations=[ObservationResult(tracking_id="1", label="mug", timestamp_seconds=stamps[f],
+                                        frame_number=f, bbox=[10, 10, 20, 20]) for f in seen])
+    batch = build_memory_batch(uuid.uuid4(), "c.mp4", datetime.now(UTC), result)
+
+    assert batch.frame_timestamps_ms == [int(t * 1000) for t in stamps]
+    [gone] = [e for e in EventDetector().detect(batch) if e.event_type == "NO_LONGER_VISIBLE"]
+    assert (gone.start_time_ms, gone.end_time_ms) == (1000, 3500)

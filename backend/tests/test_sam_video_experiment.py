@@ -2,7 +2,6 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "test_sam_video.py"
 spec = importlib.util.spec_from_file_location("sam_video_experiment", SCRIPT)
 module = importlib.util.module_from_spec(spec)

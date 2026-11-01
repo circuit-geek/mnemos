@@ -11,7 +11,7 @@ let counter = 0;
 const nextId = () => `msg-${Date.now()}-${counter++}`;
 
 export function AskSidebar({ onClose }: { onClose: () => void }) {
-  const { video, memory } = useExplorer();
+  const { video, memory, setAnswerMarkers } = useExplorer();
   const [messages, setMessages] = useState<ReasoningMessage[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -32,6 +32,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
       setPending(true);
       try {
         const res = await reasoningService.ask(video.id, q, memory);
+        setAnswerMarkers(res.evidence);
         setMessages((m) => [
           ...m,
           {
@@ -60,7 +61,7 @@ export function AskSidebar({ onClose }: { onClose: () => void }) {
         setPending(false);
       }
     },
-    [pending, video.id, memory],
+    [pending, video.id, memory, setAnswerMarkers],
   );
 
   const retry = (errorId: string) => {

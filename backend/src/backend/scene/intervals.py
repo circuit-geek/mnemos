@@ -1,11 +1,15 @@
 """Turn per-frame relation detections into validity intervals (pure; no I/O)."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from backend.memory.models import Relationship
 from backend.memory.transformer import stable_id
 
 SYMMETRIC = {"NEXT_TO", "NEAR"}
+# NEAR and NEXT_TO between one pair are one continuous proximity; the model flips between the
+# two from frame to frame, so they share an interval and are labelled by the more frequent one.
+PROXIMITY = "PROXIMITY"
 
 
 @dataclass(frozen=True)
@@ -18,8 +22,10 @@ class Detected:
 
     def key(self) -> tuple[str, str, str]:
         subject, target = self.subject_id, self.target_id
-        if self.relation_type in SYMMETRIC and subject > target:
-            subject, target = target, subject
+        if self.relation_type in SYMMETRIC:
+            if subject > target:
+                subject, target = target, subject
+            return PROXIMITY, subject, target
         return self.relation_type, subject, target
 
 
@@ -42,6 +48,9 @@ def build_relationships(video_id: str, samples: list[Sample]) -> list[Relationsh
 
     def finish(state: dict, valid_to: int | None) -> None:
         relation_type, subject, target = state["key"]
+        if relation_type == PROXIMITY:
+            kinds = state["kinds"]
+            relation_type = "NEXT_TO" if kinds["NEXT_TO"] >= kinds["NEAR"] else "NEAR"
         done.append(Relationship(
             relationship_id=stable_id("relationship", video_id, relation_type, subject, target,
                                       state["from"]),
@@ -59,6 +68,7 @@ def build_relationships(video_id: str, samples: list[Sample]) -> list[Relationsh
             _, subject, target = key
             if key in reported:
                 open_state[key]["last"] = sample.timestamp_ms
+                open_state[key]["kinds"][reported[key].relation_type] += 1
             elif subject in sample.visible and target in sample.visible:
                 finish(open_state.pop(key), sample.timestamp_ms)
         for key, detection in reported.items():
@@ -66,7 +76,7 @@ def build_relationships(video_id: str, samples: list[Sample]) -> list[Relationsh
                 open_state[key] = {
                     "key": key, "from": sample.timestamp_ms, "last": sample.timestamp_ms,
                     "evidence": sample.timestamp_ms, "confidence": detection.confidence,
-                    "reason": detection.reason,
+                    "reason": detection.reason, "kinds": Counter({detection.relation_type: 1}),
                 }
     for state in open_state.values():
         finish(state, None)

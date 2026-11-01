@@ -46,7 +46,7 @@ async def build_container(settings: Settings) -> AppContainer:
     memory = graph.repository if isinstance(graph, Neo4jGraphWriter) else None
     reasoning = scene = None
     if memory is not None and settings.meta_api_key:
-        muse = MuseClient(settings.meta_api_key, settings.muse_model)
+        muse = MuseClient(settings.meta_api_key, settings.muse_model, timeout=settings.muse_timeout_seconds)
         reasoning = ReasoningService(memory, muse)
         scene = SceneAnalyzer(
             muse,
