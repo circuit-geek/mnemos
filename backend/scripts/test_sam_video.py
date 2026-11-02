@@ -41,6 +41,11 @@ def probe_video(path):
         raise ValueError("No readable video stream")
     stream = data["streams"][0]
     width, height = int(stream["width"]), int(stream["height"])
+    # Players, ffmpeg and SAM all see the displayed (rotated) frame, not the stored one.
+    rotation = next((s["rotation"] for s in stream.get("side_data_list", []) if "rotation" in s),
+                    stream.get("tags", {}).get("rotate", 0))
+    if int(float(rotation)) % 180 == 90:
+        width, height = height, width
     fps = float(Fraction(stream.get("avg_frame_rate") or stream["r_frame_rate"]))
     duration = float(stream.get("duration") or data["format"]["duration"])
     frame_count = int(stream.get("nb_frames") or round(duration * fps))
