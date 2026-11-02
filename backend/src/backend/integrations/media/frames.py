@@ -23,9 +23,10 @@ async def extract_frame_jpeg(path: str, timestamp_ms: int, max_width: int | None
 async def _extract_once(path: str, timestamp_ms: int, max_width: int | None) -> bytes:
     command = ["ffmpeg", "-v", "error", "-ss", f"{timestamp_ms / 1000:.3f}", "-i", path,
                "-frames:v", "1"]
-    if max_width:
-        command += ["-vf", f"scale='min({max_width},iw)':-2"]
-    command += ["-f", "image2pipe", "-vcodec", "mjpeg", "-"]
+    # MJPEG needs full-range YUV; newer ffmpeg refuses the limited-range output of most H.264.
+    filters = [f"scale='min({max_width},iw)':-2"] if max_width else []
+    filters.append("format=yuvj420p")
+    command += ["-vf", ",".join(filters), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
     process = await asyncio.create_subprocess_exec(
         *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
