@@ -4,7 +4,7 @@
 
 MNEMOS is a spatiotemporal visual memory system. It turns video into a temporal knowledge graph of objects, their spatial relationships and the events that happen to them, then answers natural-language questions about that history with evidence-linked answers.
 
-Most visual AI interprets a single frame or a short clip. MNEMOS remembers, so you can ask:
+Most visual AI interprets what is in front of it right now and then forgets. MNEMOS remembers an uploaded video, so you can ask:
 
 - What changed in this room over the last hour?
 - Where was the laptop last observed?
